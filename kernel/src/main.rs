@@ -12,14 +12,14 @@ use core::panic::PanicInfo;
 extern fn _start(fb: Framebuffer<'static>) -> ! {
     Printer::init_global(fb, &video::fonts::CYLBURN, 60.0);
 
-    println!("FooBar");
+    println!("Hello, World!");
 
     loop {}
 }
 
 #[panic_handler]
 fn panic_handler(info: &PanicInfo) -> ! {
-    println!("[PANIC]: {}", info);
+    println!("[Panic]: {}", info);
 
     loop {}
 }
