@@ -4,15 +4,15 @@
 mod alloc;
 mod video;
 
-use video::{Framebuffer, Printer};
+use video::{Framebuffer, Printer, Color};
 
 use core::panic::PanicInfo;
 
 #[no_mangle]
 extern fn _start(fb: Framebuffer<'static>) -> ! {
-    Printer::init_global(fb, &video::fonts::CYLBURN, 60.0);
+    Printer::init_global(fb, &video::fonts::CYLBURN, 60.0, Color::new(212.0, 78.0, 159.0));
 
-    println!("Hello, World!");
+    println!("Alexandra Yanikova");
 
     loop {}
 }
