@@ -12,7 +12,7 @@ use core::panic::PanicInfo;
 extern fn _start(fb: Framebuffer<'static>) -> ! {
     Printer::init_global(fb, &video::fonts::CYLBURN, 60.0, Color::new(212.0, 78.0, 159.0));
 
-    println!("Alexandra Yanikova");
+    println!("Hello, World");
 
     loop {}
 }
