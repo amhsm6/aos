@@ -1,12 +1,14 @@
 #![no_main]
 #![no_std]
 
-use core::{mem, ptr};
+use core::{mem, ptr, str};
 use uefi::println;
 use uefi::prelude::*;
 use uefi::fs::FileSystem;
 use uefi::table::boot::MemoryType;
 use uefi::proto::console::gop::{GraphicsOutput, PixelFormat};
+use uefi::proto::device_path::DevicePath;
+use uefi::proto::device_path::acpi::{Acpi, Expanded};
 use elf::ElfBytes;
 use elf::abi::PT_LOAD;
 use elf::endian::LittleEndian;
@@ -42,13 +44,13 @@ fn setup_video(bs: &BootServices) -> *mut [[u32; 1920]; 1080] {
     let mut gop = bs.open_protocol_exclusive::<GraphicsOutput>(gop_handle).unwrap();
 
     let mode = gop.modes(bs)
-                   .filter(|mode| {
-                       let info = mode.info();
-                       info.resolution() == (1920, 1080) &&
-                           info.pixel_format() == PixelFormat::Bgr &&
-                           info.stride() == 1920
-                   })
-                   .nth(0).unwrap();
+        .filter(|mode| {
+            let info = mode.info();
+            info.resolution() == (1920, 1080) &&
+                info.pixel_format() == PixelFormat::Bgr &&
+                info.stride() == 1920
+        })
+        .nth(0).unwrap();
     gop.set_mode(&mode).unwrap();
 
     gop.frame_buffer().as_mut_ptr() as *mut [[u32; 1920]; 1080]
@@ -60,6 +62,26 @@ fn main(handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
     let start_ptr = load_kernel(system_table.boot_services(), handle);
     let start = unsafe { mem::transmute::<StartPtr, Start>(start_ptr) };
+
+    let bs = system_table.boot_services();
+    let devpath_handle = bs.get_handle_for_protocol::<DevicePath>().unwrap();
+    let devpath = bs.open_protocol_exclusive::<DevicePath>(devpath_handle).unwrap();
+
+    devpath.instance_iter()
+        .for_each(|dev| {
+            dev.node_iter()
+                .for_each(|node| {
+                    println!("{node:?}");
+                    /*if let Ok(node) = TryInto::<&Acpi>::try_into(node) {
+                        println!("{}", node.hid());
+                        /*if let Ok(string) = str::from_utf8(node.hid_str()) {
+                            println!("{}", string);
+                        }*/
+                    }*/
+                });
+        });
+
+    loop {}
 
     let fb_ptr = setup_video(system_table.boot_services());
     let fb = unsafe { &mut *fb_ptr };

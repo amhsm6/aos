@@ -65,10 +65,11 @@ impl<'a> Printer<'a> {
             glyph.draw(|x, y, a| {
                 let x = bounds.min.x as usize + x as usize;
                 let y = bounds.min.y as usize + y as usize;
-                let p = Pixel { red: (self.color.r * a) as u8,
-                                green: (self.color.g * a) as u8,
-                                blue: (self.color.b * a) as u8
-                              };
+                let p = Pixel {
+                    red: (self.color.r * a) as u8,
+                    green: (self.color.g * a) as u8,
+                    blue: (self.color.b * a) as u8
+                };
 
                 self.fb[y][x] = self.fb[y][x].max(p);
             });
