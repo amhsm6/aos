@@ -1,1 +1,1 @@
-Very basic x86 bare metal bootloader and keyboard echo app as [**fake os kernel**]. For fun.
+My attempts in OS development. This is a simple x86 UEFI bootloader with a basic kernel, supporting keyboard and printing text, working as a notepad-like application.
