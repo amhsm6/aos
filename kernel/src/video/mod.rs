@@ -2,8 +2,8 @@ pub mod framebuffer;
 pub mod printer;
 pub mod fonts;
 
-pub use framebuffer::*;
-pub use printer::*;
+use framebuffer::Framebuffer;
+use printer::{Printer, Color};
 
 use core::fmt::{Arguments, Write};
 

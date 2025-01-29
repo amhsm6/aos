@@ -5,13 +5,14 @@ mod alloc;
 mod video;
 mod input;
 
-use video::{Framebuffer, Printer, Color};
-use input::Keyboard;
+use input::keyboard::Keyboard;
+use video::framebuffer::Framebuffer;
+use video::printer::{Color, Printer};
 
 use core::panic::PanicInfo;
 
 #[no_mangle]
-extern fn _start(fb: Framebuffer<'static>) -> ! {
+extern "sysv64" fn _start(fb: Framebuffer<'static>) -> ! {
     Printer::init_global(fb, &video::fonts::CYLBURN, 60.0, Color::new(212.0, 78.0, 159.0));
 
     let mut kb = Keyboard::new();

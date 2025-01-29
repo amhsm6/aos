@@ -1,4 +1,4 @@
-use crate::video::{Framebuffer, Pixel};
+use crate::video::framebuffer::{Framebuffer, Pixel};
 
 use core::fmt::Write;
 use rusttype::{Font, Scale, Point};
@@ -51,7 +51,7 @@ impl<'a> Printer<'a> {
         let mut glyph = glyph.positioned(self.pos);
 
         if let Some(bounds) = glyph.pixel_bounding_box() {
-            if bounds.max.x >= crate::video::HRES as i32 {
+            if bounds.max.x >= crate::video::framebuffer::HRES as i32 {
                 self.newline();
             }
 

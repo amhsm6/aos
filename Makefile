@@ -1,5 +1,5 @@
-kernel.elf = kernel/target/x86_64-unknown-none/release/kernel
-boot.efi = boot/target/x86_64-unknown-uefi/release/boot.efi
+kernel.elf = target/x86_64-unknown-none/release/kernel
+boot.efi = target/x86_64-unknown-uefi/release/boot.efi
 
 build: image
 
@@ -18,13 +18,12 @@ image: $(kernel.elf) $(boot.efi)
 	sudo umount esp
 
 $(kernel.elf): kernel/src/*
-	make -C kernel build
+	cargo -C kernel build --release -Z unstable-options
 
 $(boot.efi): boot/src/*
-	make -C boot build
+	cargo -C boot build --release -Z unstable-options
 
 clean:
+	cargo clean
 	mkfs.vfat --offset=2048 image
 	rm -rf esp
-	make -C kernel clean
-	make -C boot clean
