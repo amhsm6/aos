@@ -6,7 +6,7 @@ build: image
 test: image
 	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive file=image -net none
 
-dbg: image
+debug: image
 	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive file=image -net none -s -S
 
 image: $(kernel.elf) $(boot.efi)

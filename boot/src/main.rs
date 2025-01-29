@@ -4,6 +4,7 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
+use uefi::mem::memory_map::MemoryMap;
 use core::{mem, ptr};
 use core::error::Error;
 use elf::ElfBytes;
@@ -25,7 +26,8 @@ fn load_kernel() -> Result<StartPtr, Box<dyn Error>> {
     let buf = fs.read(cstr16!("\\kernel.elf"))?;
     let elf: ElfBytes<LittleEndian> = ElfBytes::minimal_parse(&buf)?;
 
-    elf.segments().ok_or("elf does not contain segments")?
+    elf.segments()
+        .ok_or("elf does not contain segments")?
         .into_iter()
         .filter(|phdr| phdr.p_type == PT_LOAD)
         .for_each(|phdr| unsafe {
@@ -38,6 +40,28 @@ fn load_kernel() -> Result<StartPtr, Box<dyn Error>> {
             let src = buf.as_ptr().add(phdr.p_offset as usize);
             ptr::copy(src, dst, phdr.p_filesz as usize);
         });
+
+    fn display_mem(typ: MemoryType, name: &str) -> Result<(), Box<dyn Error>> {
+        let mmap = boot::memory_map(typ)?;
+        for entry in mmap.entries() {
+            println!("Memory {}: PHYS 0x{:x} VIRT 0x{:x}: {} pages", name, entry.phys_start, entry.virt_start, entry.page_count);
+        }
+
+        Ok(())
+    }
+
+    display_mem(MemoryType::LOADER_CODE, "LOADER_CODE")?;
+    display_mem(MemoryType::LOADER_DATA, "LOADER_DATA")?;
+    display_mem(MemoryType::BOOT_SERVICES_CODE, "BOOT_SERVICES_CODE")?;
+    display_mem(MemoryType::BOOT_SERVICES_DATA, "BOOT_SERVICES_DATA")?;
+    display_mem(MemoryType::RUNTIME_SERVICES_CODE, "RUNTIME_SERVICES_CODE")?;
+    display_mem(MemoryType::RUNTIME_SERVICES_DATA, "RUNTIME_SERVICES_DATA")?;
+    display_mem(MemoryType::ACPI_NON_VOLATILE, "ACPI_NON_VOLATILE")?;
+    display_mem(MemoryType::ACPI_RECLAIM, "ACPI_RECLAIM")?;
+    display_mem(MemoryType::MMIO, "MMIO")?;
+    display_mem(MemoryType::MMIO_PORT_SPACE, "MMIO_PORT_SPACE")?;
+
+    boot::stall(15000000);
 
     Ok(elf.ehdr.e_entry as StartPtr)
 }
@@ -53,7 +77,8 @@ fn setup_video() -> Result<*mut [[u32; 1920]; 1080], Box<dyn Error>> {
                 info.pixel_format() == PixelFormat::Bgr &&
                 info.stride() == 1920
         })
-        .nth(0).ok_or("no graphic modes available")?;
+        .nth(0)
+        .ok_or("no graphic modes available")?;
     gop.set_mode(&mode)?;
 
     Ok(gop.frame_buffer().as_mut_ptr() as *mut [[u32; 1920]; 1080])
