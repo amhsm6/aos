@@ -4,7 +4,6 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
-use uefi::mem::memory_map::MemoryMap;
 use core::{mem, ptr};
 use core::error::Error;
 use elf::ElfBytes;
@@ -34,34 +33,12 @@ fn load_kernel() -> Result<StartPtr, Box<dyn Error>> {
             println!("[0x{:x}] Init {} bytes", phdr.p_paddr, phdr.p_memsz);
             println!("[0x{:x}] Copy {} bytes", phdr.p_paddr, phdr.p_filesz);
 
-            let dst = phdr.p_vaddr as *mut u8;
+            let dst = phdr.p_paddr as *mut u8;
             ptr::write_bytes(dst, 0, phdr.p_memsz as usize);
 
             let src = buf.as_ptr().add(phdr.p_offset as usize);
             ptr::copy(src, dst, phdr.p_filesz as usize);
         });
-
-    fn display_mem(typ: MemoryType, name: &str) -> Result<(), Box<dyn Error>> {
-        let mmap = boot::memory_map(typ)?;
-        for entry in mmap.entries() {
-            println!("Memory {}: PHYS 0x{:x} VIRT 0x{:x}: {} pages", name, entry.phys_start, entry.virt_start, entry.page_count);
-        }
-
-        Ok(())
-    }
-
-    display_mem(MemoryType::LOADER_CODE, "LOADER_CODE")?;
-    display_mem(MemoryType::LOADER_DATA, "LOADER_DATA")?;
-    display_mem(MemoryType::BOOT_SERVICES_CODE, "BOOT_SERVICES_CODE")?;
-    display_mem(MemoryType::BOOT_SERVICES_DATA, "BOOT_SERVICES_DATA")?;
-    display_mem(MemoryType::RUNTIME_SERVICES_CODE, "RUNTIME_SERVICES_CODE")?;
-    display_mem(MemoryType::RUNTIME_SERVICES_DATA, "RUNTIME_SERVICES_DATA")?;
-    display_mem(MemoryType::ACPI_NON_VOLATILE, "ACPI_NON_VOLATILE")?;
-    display_mem(MemoryType::ACPI_RECLAIM, "ACPI_RECLAIM")?;
-    display_mem(MemoryType::MMIO, "MMIO")?;
-    display_mem(MemoryType::MMIO_PORT_SPACE, "MMIO_PORT_SPACE")?;
-
-    boot::stall(15000000);
 
     Ok(elf.ehdr.e_entry as StartPtr)
 }
