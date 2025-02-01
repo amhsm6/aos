@@ -7,9 +7,9 @@ use alloc::format;
 use alloc::alloc::alloc;
 use alloc::boxed::Box;
 use alloc::string::ToString;
+use anyhow::{anyhow, Error, Result};
 use core::alloc::Layout;
 use core::{mem, ptr};
-use core::error::Error;
 use elf::ElfBytes;
 use elf::abi::PT_LOAD;
 use elf::endian::LittleEndian;
@@ -35,11 +35,11 @@ struct MemoryPool {
 }
 
 impl MemoryPool {
-    fn find() -> Result<MemoryPool, Box<dyn Error>> {
+    fn find() -> Result<MemoryPool> {
         let mmap = boot::memory_map(MemoryType::BOOT_SERVICES_DATA)?;
         let pool = mmap.entries()
             .find(|entry| entry.ty == MemoryType::CONVENTIONAL && entry.page_count >= 1024 * 1024 * 1024 / 4096)
-            .ok_or("Not enough memory")?;
+            .ok_or(anyhow!("Not enough memory"))?;
 
         let start = addr::align_up(pool.phys_start, Size2MiB::SIZE);
         let end = addr::align_down(pool.phys_start + pool.page_count * 4096, Size2MiB::SIZE);
@@ -61,7 +61,7 @@ unsafe impl<S: PageSize> FrameAllocator<S> for FAllocator {
     }
 }
 
-fn load_kernel(pool: MemoryPool) -> Result<Start, Box<dyn Error>> {
+fn load_kernel(pool: MemoryPool) -> Result<Start> {
     let fs_proto = boot::get_image_file_system(boot::image_handle())?;
     let mut fs = FileSystem::new(fs_proto);
 
@@ -69,7 +69,7 @@ fn load_kernel(pool: MemoryPool) -> Result<Start, Box<dyn Error>> {
     let elf: ElfBytes<LittleEndian> = ElfBytes::minimal_parse(&buf)?;
 
     elf.segments()
-        .ok_or("Elf does not contain segments")?
+        .ok_or(anyhow!("Elf does not contain segments"))?
         .into_iter()
         .filter(|phdr| phdr.p_type == PT_LOAD)
         .for_each(|phdr| unsafe {
@@ -85,23 +85,23 @@ fn load_kernel(pool: MemoryPool) -> Result<Start, Box<dyn Error>> {
     unsafe { Ok(mem::transmute(elf.ehdr.e_entry)) }
 }
 
-fn setup_paging(pool: MemoryPool) -> Result<(), Box<dyn Error>> {
+fn setup_paging(pool: MemoryPool) -> Result<()> {
     unsafe {
         let (pt4, _) = Cr3::read();
         let pt4ptr = pt4.start_address().as_u64() as *mut PageTable;
         let mut page_table = OffsetPageTable::new(&mut *pt4ptr, VirtAddr::zero());
 
         let vstart = Page::from_start_address(VirtAddr::new(0xffff800000000000))
-            .map_err(|e| e.to_string())?;
+            .map_err(Error::msg)?;
 
         let vend = Page::from_start_address(VirtAddr::new(0xffff800000000000 + pool.end - pool.start))
-            .map_err(|e| e.to_string())?;
+            .map_err(Error::msg)?;
 
         let pstart = PhysFrame::from_start_address(PhysAddr::new(pool.start))
-            .map_err(|e| e.to_string())?;
+            .map_err(Error::msg)?;
         
         let pend = PhysFrame::from_start_address(PhysAddr::new(pool.end))
-            .map_err(|e| e.to_string())?;
+            .map_err(Error::msg)?;
 
         let pages: PageRange<Size2MiB> = Page::range(vstart, vend);
         let frames: PhysFrameRange<Size2MiB> = PhysFrame::range(pstart, pend);
@@ -112,7 +112,7 @@ fn setup_paging(pool: MemoryPool) -> Result<(), Box<dyn Error>> {
 
             page_table
                 .map_to(page, frame, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut falloc)
-                .map_err(|e| format!("{e:?}"))?
+                .map_err(|e| anyhow!("{e:?}"))?
                 .flush();
         }
 
@@ -123,7 +123,7 @@ fn setup_paging(pool: MemoryPool) -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn setup_video<'a>() -> Result<Framebuffer<'a>, Box<dyn Error>> {
+fn setup_video<'a>() -> Result<Framebuffer<'a>> {
     let gop_handle = boot::get_handle_for_protocol::<GraphicsOutput>()?;
     let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(gop_handle)?;
 
@@ -134,7 +134,7 @@ fn setup_video<'a>() -> Result<Framebuffer<'a>, Box<dyn Error>> {
                 info.pixel_format() == PixelFormat::Bgr &&
                 info.stride() == 1920
         })
-        .ok_or("No graphic modes available")?;
+        .ok_or(anyhow!("No graphic modes available"))?;
 
     gop.set_mode(&mode)?;
 
@@ -142,7 +142,7 @@ fn setup_video<'a>() -> Result<Framebuffer<'a>, Box<dyn Error>> {
     unsafe { Ok(&mut *ptr) }
 }
 
-fn init() -> Result<(), Box<dyn Error>> {
+fn init() -> Result<()> {
     uefi::helpers::init()?;
     system::with_stdout(|stdout| stdout.clear())?;
 
