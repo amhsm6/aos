@@ -3,10 +3,7 @@
 
 extern crate alloc;
 
-use alloc::format;
 use alloc::alloc::alloc;
-use alloc::boxed::Box;
-use alloc::string::ToString;
 use anyhow::{anyhow, Error, Result};
 use core::alloc::Layout;
 use core::{mem, ptr};
@@ -36,7 +33,7 @@ struct MemoryPool {
 
 impl MemoryPool {
     fn find() -> Result<MemoryPool> {
-        let mmap = boot::memory_map(MemoryType::BOOT_SERVICES_DATA)?;
+        let mmap = boot::memory_map(MemoryType::BOOT_SERVICES_DATA).map_err(Error::msg)?;
         let pool = mmap.entries()
             .find(|entry| entry.ty == MemoryType::CONVENTIONAL && entry.page_count >= 1024 * 1024 * 1024 / 4096)
             .ok_or(anyhow!("Not enough memory"))?;
@@ -62,11 +59,11 @@ unsafe impl<S: PageSize> FrameAllocator<S> for FAllocator {
 }
 
 fn load_kernel(pool: MemoryPool) -> Result<Start> {
-    let fs_proto = boot::get_image_file_system(boot::image_handle())?;
+    let fs_proto = boot::get_image_file_system(boot::image_handle()).map_err(Error::msg)?;
     let mut fs = FileSystem::new(fs_proto);
 
-    let buf = fs.read(cstr16!("\\kernel.elf"))?;
-    let elf: ElfBytes<LittleEndian> = ElfBytes::minimal_parse(&buf)?;
+    let buf = fs.read(cstr16!("\\kernel.elf")).map_err(Error::msg)?;
+    let elf: ElfBytes<LittleEndian> = ElfBytes::minimal_parse(&buf).map_err(Error::msg)?;
 
     elf.segments()
         .ok_or(anyhow!("Elf does not contain segments"))?
@@ -124,8 +121,8 @@ fn setup_paging(pool: MemoryPool) -> Result<()> {
 }
 
 fn setup_video<'a>() -> Result<Framebuffer<'a>> {
-    let gop_handle = boot::get_handle_for_protocol::<GraphicsOutput>()?;
-    let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(gop_handle)?;
+    let gop_handle = boot::get_handle_for_protocol::<GraphicsOutput>().map_err(Error::msg)?;
+    let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(gop_handle).map_err(Error::msg)?;
 
     let mode = gop.modes()
         .find(|mode| {
@@ -136,15 +133,15 @@ fn setup_video<'a>() -> Result<Framebuffer<'a>> {
         })
         .ok_or(anyhow!("No graphic modes available"))?;
 
-    gop.set_mode(&mode)?;
+    gop.set_mode(&mode).map_err(Error::msg)?;
 
     let ptr = gop.frame_buffer().as_mut_ptr() as *mut [[u32; 1920]; 1080];
     unsafe { Ok(&mut *ptr) }
 }
 
 fn init() -> Result<()> {
-    uefi::helpers::init()?;
-    system::with_stdout(|stdout| stdout.clear())?;
+    uefi::helpers::init().map_err(Error::msg)?;
+    system::with_stdout(|stdout| stdout.clear()).map_err(Error::msg)?;
 
     let pool = MemoryPool::find()?;
     println!("Memory Pool: 0x{:x} -- 0x{:x}", pool.start, pool.end);
@@ -166,7 +163,7 @@ fn main() -> Status {
             loop {}
         }
         Err(err) => {
-            println!("ERROR: {}", err);
+            println!("ERROR: {err}");
             loop {}
         }
     }

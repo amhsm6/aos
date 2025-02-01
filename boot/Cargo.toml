@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-uefi = { version = "0.33.0", features = ["panic_handler", "alloc", "global_allocator", "unstable"] }
-elf = { version = "0.7.4", default-features = false, features = ["nightly"] }
+uefi = { version = "0.33.0", features = ["panic_handler", "alloc", "global_allocator"] }
+elf = { version = "0.7.4", default-features = false, features = [] }
 x86_64 = "0.15.2"
 anyhow = { version = "1.0.95", default-features = false }
