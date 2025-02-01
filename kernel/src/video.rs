@@ -2,10 +2,10 @@ pub mod framebuffer;
 pub mod printer;
 pub mod fonts;
 
+use core::fmt::{Arguments, Write};
+
 use framebuffer::Framebuffer;
 use printer::{Printer, Color};
-
-use core::fmt::{Arguments, Write};
 
 static mut PRINTER: Option<Printer<'static>> = None;
 

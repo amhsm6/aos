@@ -1,7 +1,7 @@
-use crate::video::framebuffer::{Framebuffer, Pixel};
-
 use core::fmt::Write;
 use rusttype::{Font, Scale, Point};
+
+use crate::video::framebuffer::{Framebuffer, Pixel};
 
 pub struct Color {
     r: f32,

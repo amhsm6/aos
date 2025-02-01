@@ -5,11 +5,11 @@ mod alloc;
 mod video;
 mod input;
 
+use core::panic::PanicInfo;
+
 use input::keyboard::Keyboard;
 use video::framebuffer::Framebuffer;
 use video::printer::{Color, Printer};
-
-use core::panic::PanicInfo;
 
 #[no_mangle]
 extern "sysv64" fn _start(fb: Framebuffer<'static>) -> ! {
