@@ -4,10 +4,10 @@ boot.efi = target/x86_64-unknown-uefi/release/boot.efi
 build: image
 
 test: image
-	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive file=image -net none
+	qemu-system-x86_64 -m 4G -bios /usr/share/ovmf/OVMF.fd -drive file=image -net none
 
 debug: image
-	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive file=image -net none -s -S
+	qemu-system-x86_64 -m 4G -bios /usr/share/ovmf/OVMF.fd -drive file=image -net none -s -S
 
 image: $(kernel.elf) $(boot.efi)
 	mkdir -p esp
@@ -18,10 +18,10 @@ image: $(kernel.elf) $(boot.efi)
 	sudo umount esp
 
 $(kernel.elf): kernel/src/*
-	cargo -C kernel build --release -Z unstable-options
+	cd kernel; cargo build --release
 
 $(boot.efi): boot/src/*
-	cargo -C boot build --release -Z unstable-options
+	cd boot; cargo build --release
 
 clean:
 	cargo clean
