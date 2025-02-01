@@ -5,6 +5,7 @@ extern crate alloc;
 
 use alloc::alloc::alloc;
 use anyhow::{anyhow, Error, Result};
+use x86_64::registers::control::Cr3;
 use core::alloc::Layout;
 use core::{mem, ptr};
 use elf::ElfBytes;
@@ -17,8 +18,7 @@ use uefi::fs::FileSystem;
 use uefi::mem::memory_map::MemoryMap;
 use uefi::proto::console::gop::{GraphicsOutput, PixelFormat};
 use x86_64::{addr, PhysAddr, VirtAddr};
-use x86_64::registers::control::Cr3;
-use x86_64::structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageSize, PageTable, PageTableFlags, PhysFrame, Size2MiB, Translate};
+use x86_64::structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageSize, PageTable, PageTableFlags, PhysFrame, Size2MiB, Size4KiB};
 use x86_64::structures::paging::frame::PhysFrameRange;
 use x86_64::structures::paging::page::PageRange;
 
@@ -51,9 +51,7 @@ unsafe impl<S: PageSize> FrameAllocator<S> for FAllocator {
     fn allocate_frame(&mut self) -> Option<PhysFrame<S>> {
         unsafe {
             let ptr = alloc(Layout::from_size_align(S::SIZE as usize, S::SIZE as usize).ok()?);
-            let x = PhysFrame::from_start_address(PhysAddr::new(ptr as u64)).ok();
-            println!("{x:?}");
-            x
+            PhysFrame::from_start_address(PhysAddr::new(ptr as u64)).ok()
         }
     }
 }
@@ -84,9 +82,14 @@ fn load_kernel(pool: MemoryPool) -> Result<Start> {
 
 fn setup_paging(pool: MemoryPool) -> Result<()> {
     unsafe {
-        let (pt4, _) = Cr3::read();
-        let pt4ptr = pt4.start_address().as_u64() as *mut PageTable;
-        let mut page_table = OffsetPageTable::new(&mut *pt4ptr, VirtAddr::zero());
+        let mut falloc = FAllocator;
+
+        let p4frame: PhysFrame<Size4KiB> = falloc.allocate_frame().ok_or(anyhow!("Unable to allocate page table"))?;
+        let p4ptr = p4frame.start_address().as_u64() as *mut PageTable;
+        let p4 = &mut *p4ptr;
+
+        p4.zero();
+        let mut page_table = OffsetPageTable::new(p4, VirtAddr::zero());
 
         let vstart = Page::from_start_address(VirtAddr::new(0xffff800000000000))
             .map_err(Error::msg)?;
@@ -103,17 +106,23 @@ fn setup_paging(pool: MemoryPool) -> Result<()> {
         let pages: PageRange<Size2MiB> = Page::range(vstart, vend);
         let frames: PhysFrameRange<Size2MiB> = PhysFrame::range(pstart, pend);
 
-        let mut falloc = FAllocator;
         for (page, frame) in pages.zip(frames) {
-            println!("{page:?} {frame:?}");
-
             page_table
                 .map_to(page, frame, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut falloc)
                 .map_err(|e| anyhow!("{e:?}"))?
                 .flush();
         }
 
-        println!("{:?}", page_table.translate(VirtAddr::new(0xffff800000000000)));
+        let (oldp4frame, flags) = Cr3::read();
+
+        let oldp4ptr = oldp4frame.start_address().as_u64() as *const PageTable;
+        let oldp4 = &*oldp4ptr;
+        for (i, entry) in oldp4.iter().enumerate() {
+            if !entry.is_unused() { p4[i] = entry.clone(); }
+        }
+
+        Cr3::write(p4frame, flags);
+
         loop {}
 
         Ok(())

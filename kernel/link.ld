@@ -12,39 +12,40 @@
 
 */
 
-MEMORY {
-    KERNEL : ORIGIN = 0x00000000, LENGTH = 512M
-    STACK  : ORIGIN = 0x20000000, LENGTH = 1M
-}
-
 ENTRY(_start)
 
 SECTIONS {
-    .text : {
+    _kernel_begin = 0xffff800000000000;
+    _kernel_size = 512M;
+    _stack_size = 1M;
+
+    . = _kernel_begin;
+    .text : AT(0) {
         *(.text*)
-    } > KERNEL
+    }
 
     .data : {
         *(.data*)
-    } > KERNEL
+    }
 
     .rodata : {
         *(.rodata*)
-    } > KERNEL
+    }
 
     .got : {
         *(.got*)
-    } > KERNEL
+    }
 
     .bss : {
         *(.bss*)
-    } > KERNEL
+    }
 
-    .stack : AT(ADDR(.bss) + SIZEOF(.bss)) {
+    . = _kernel_begin + _kernel_size;
+    .stack : AT(_kernel_size) {
         _stack_bottom = .;
-        . += LENGTH(STACK);
+        . += _stack_size;
         _stack_top = .;
-    } > STACK
+    }
 
     /DISCARD/ : { *(.eh_frame*) *(.comment*) }
 }
