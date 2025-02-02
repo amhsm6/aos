@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-x86 = "0.52.0"
 rusttype = { version = "0.9.3", default-features = false, features = ["libm-math"] }
 pc-keyboard = "0.8.0"
 x86_64 = "0.15.2"

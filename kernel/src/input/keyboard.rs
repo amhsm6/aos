@@ -1,25 +1,30 @@
 use pc_keyboard::{ScancodeSet, ScancodeSet1, EventDecoder, HandleControl, DecodedKey};
 use pc_keyboard::layouts::Us104Key;
+use x86_64::instructions::port::Port;
 
 pub struct Keyboard {
-    scancode_set: ScancodeSet1,
-    event_decoder: EventDecoder<Us104Key>
+    scancode_set:  ScancodeSet1,
+    event_decoder: EventDecoder<Us104Key>,
+    status_port:   Port<u8>,
+    data_port:     Port<u8>
 }
 
 impl Keyboard {
     pub fn new() -> Keyboard {
         Keyboard {
-            scancode_set: ScancodeSet1::new(),
-            event_decoder: EventDecoder::new(Us104Key, HandleControl::Ignore)
+            scancode_set:  ScancodeSet1::new(),
+            event_decoder: EventDecoder::new(Us104Key, HandleControl::Ignore),
+            status_port:   Port::new(0x64),
+            data_port:     Port::new(0x60)
         }
     }
 
     pub fn read_char(&mut self) -> Option<char> {
         let data = unsafe {
-            let status = x86::io::inb(0x64);
+            let status = self.status_port.read();
             if status & 1 == 0 { return None; }
 
-            x86::io::inb(0x60)
+            self.data_port.read()
         };
 
         let event = self.scancode_set.advance_state(data).unwrap();

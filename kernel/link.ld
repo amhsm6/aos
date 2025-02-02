@@ -1,43 +1,39 @@
 /*
 
-0xffff8000_00000000
+0xffffffffaf000000
 |
 | KERNEL (512MB)
 |
-0xffff8000_20000000
+0xffffffffcf000000
 |
 | STACK (1MB)
 |
-0xffff8000_20100000
+0xffffffffcf100000
 
 */
 
 ENTRY(_start)
 
 SECTIONS {
-    _kernel_begin = 0xffff800000000000;
+    _kernel_begin = 0xffffffffaf000000;
     _kernel_size = 512M;
     _stack_size = 1M;
 
     . = _kernel_begin;
     .text : AT(0) {
-        *(.text*)
+        *(.ltext*)
     }
 
     .data : {
-        *(.data*)
+        *(.ldata*)
     }
 
     .rodata : {
-        *(.rodata*)
-    }
-
-    .got : {
-        *(.got*)
+        *(.lrodata*)
     }
 
     .bss : {
-        *(.bss*)
+        *(.lbss*)
     }
 
     . = _kernel_begin + _kernel_size;

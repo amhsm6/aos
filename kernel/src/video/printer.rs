@@ -1,7 +1,7 @@
 use core::fmt::Write;
 use rusttype::{Font, Scale, Point};
 
-use crate::video::framebuffer::{Framebuffer, Pixel};
+use crate::video::framebuffer::{Framebuffer, Pixel, HRES};
 
 pub struct Color {
     r: f32,
@@ -16,11 +16,11 @@ impl Color {
 }
 
 pub struct Printer<'a> {
-    fb: Framebuffer<'a>,
-    font: Font<'a>,
+    fb:    Framebuffer<'a>,
+    font:  Font<'a>,
     scale: Scale,
     color: Color,
-    pos: Point<f32>
+    pos:   Point<f32>
 }
 
 impl<'a> Printer<'a> {
@@ -51,7 +51,7 @@ impl<'a> Printer<'a> {
         let mut glyph = glyph.positioned(self.pos);
 
         if let Some(bounds) = glyph.pixel_bounding_box() {
-            if bounds.max.x >= crate::video::framebuffer::HRES as i32 {
+            if bounds.max.x >= HRES as i32 {
                 self.newline();
             }
 
@@ -66,9 +66,9 @@ impl<'a> Printer<'a> {
                 let x = bounds.min.x as usize + x as usize;
                 let y = bounds.min.y as usize + y as usize;
                 let p = Pixel {
-                    red: (self.color.r * a) as u8,
+                    red:   (self.color.r * a) as u8,
                     green: (self.color.g * a) as u8,
-                    blue: (self.color.b * a) as u8
+                    blue:  (self.color.b * a) as u8
                 };
 
                 self.fb[y][x] = self.fb[y][x].max(p);
@@ -81,8 +81,9 @@ impl<'a> Printer<'a> {
 
 impl<'a> Write for Printer<'a> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        s.chars()
-            .for_each(|c| self.put_char(c));
+        for c in s.chars() {
+            self.put_char(c);
+        }
 
         Ok(())
     }
