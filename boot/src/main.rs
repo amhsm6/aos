@@ -10,8 +10,8 @@ use core::{mem, ptr};
 use elf::ElfBytes;
 use elf::abi::PT_LOAD;
 use elf::endian::LittleEndian;
+use uefi::println;
 use uefi::prelude::*;
-use uefi::{boot, println};
 use uefi::boot::MemoryType;
 use uefi::fs::FileSystem;
 use uefi::mem::memory_map::MemoryMap;
@@ -22,7 +22,7 @@ use x86_64::structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, 
 
 const KERNEL_START: u64 = 0xffffffffaf000000;
 const KERNEL_END: u64 = 0xffffffffffffffff;
-const KERNEL_SIZE: u64 = KERNEL_END - KERNEL_START;
+const KERNEL_SIZE: u64 = KERNEL_END - KERNEL_START + 1;
 
 type Framebuffer<'a> = &'a mut [[u32; 1920]; 1080];
 type Start = extern "sysv64" fn(Framebuffer) -> !;
@@ -39,7 +39,7 @@ impl MemoryPool {
             .entries()
             .find_map(|entry| {
                 if entry.ty != MemoryType::CONVENTIONAL { return None; }
-                if entry.page_count * 4096 < KERNEL_SIZE + 1 { return None; }
+                if entry.page_count * 4096 < KERNEL_SIZE { return None; }
 
                 let start = addr::align_up(entry.phys_start, Size2MiB::SIZE);
                 let end = addr::align_down(entry.phys_start + entry.page_count * 4096, Size2MiB::SIZE);
@@ -99,12 +99,14 @@ fn setup_paging(pool: MemoryPool) -> Result<()> {
         let vstart: Page<Size2MiB> = Page::containing_address(VirtAddr::new(KERNEL_START));
         let vend = Page::containing_address(VirtAddr::new(KERNEL_END));
         let pstart = PhysFrame::containing_address(PhysAddr::new(pool.start));
-        let pend = PhysFrame::containing_address(PhysAddr::new(pool.start + KERNEL_SIZE));
+        let pend = PhysFrame::containing_address(PhysAddr::new(pool.start + KERNEL_SIZE - 1));
 
         let pages = Page::range_inclusive(vstart, vend);
         let frames = PhysFrame::range_inclusive(pstart, pend);
 
-        println!("Mapping 0x{:x} -- 0x{:x} to 0x{:x} -- 0x{:x}", pool.start, pool.start + KERNEL_SIZE, KERNEL_START, KERNEL_END);
+        if pages.len() != frames.len() { return Err(anyhow!("Pages don't match frames")); }
+
+        println!("Mapping 0x{:x} -- 0x{:x} to 0x{:x} -- 0x{:x}", pool.start, pool.start + KERNEL_SIZE - 1, KERNEL_START, KERNEL_END);
         for (page, frame) in pages.zip(frames) {
             page_table
                 .map_to(page, frame, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut falloc)
@@ -149,7 +151,7 @@ fn init() -> Result<()> {
     system::with_stdout(|stdout| stdout.clear())?;
 
     let pool = MemoryPool::find()?;
-    println!("Memory Pool: 0x{:x} -- 0x{:x}", pool.start, pool.end);
+    println!("Kernel Memory Pool: 0x{:x} -- 0x{:x}", pool.start, pool.end);
 
     let start = load_kernel(pool)?;
     setup_paging(pool)?;

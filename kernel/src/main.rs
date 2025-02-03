@@ -12,7 +12,8 @@ use video::framebuffer::Framebuffer;
 use video::printer::{Color, Printer};
 
 #[no_mangle]
-extern "sysv64" fn _start(fb: Framebuffer<'static>) -> ! {
+#[link_section = ".ltext.astart"]
+extern "sysv64" fn astart(fb: Framebuffer<'static>) -> ! {
     Printer::init_global(fb, &video::fonts::CYLBURN, 60.0, Color::new(212.0, 78.0, 159.0));
 
     let mut kb = Keyboard::new();
@@ -23,6 +24,10 @@ extern "sysv64" fn _start(fb: Framebuffer<'static>) -> ! {
         }
     }
 }
+
+#[used]
+#[link_section = ".ltext._start"]
+static KERNEL_START: [u8; 16] = [0x48, 0xc7, 0xc4, 0xff, 0xff, 0xff, 0xff, 0x48, 0xc7, 0xc0, 0x00, 0x00, 0x00, 0xaf, 0xff, 0xe0];
 
 #[panic_handler]
 fn panic_handler(info: &PanicInfo) -> ! {
