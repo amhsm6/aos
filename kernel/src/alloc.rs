@@ -1,21 +1,32 @@
 extern crate alloc;
 
-use core::cell::UnsafeCell;
+use core::ptr;
+use core::cell::Cell;
 use alloc::alloc::{GlobalAlloc, Layout};
 
+extern "C" {
+    #[link_name = "_heap_begin"]
+    static HEAP_BEGIN: u64;
+
+    #[link_name = "_heap_end"]
+    static HEAP_END: u64;
+}
+
 struct Allocator {
-    top: UnsafeCell<*mut u8>
+    top: Cell<*mut u8>
 }
 
 unsafe impl Sync for Allocator {}
 
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let offset = (*self.top.get()).align_offset(layout.align());
-        let ptr = (*self.top.get()).add(offset);
+        let top = self.top.get();
 
-        let top = ptr.add(layout.size());
-        *self.top.get() = top;
+        let offset = top.align_offset(layout.align());
+        let ptr = top.add(offset);
+
+        let newtop = ptr.add(layout.size());
+        self.top.replace(newtop);
 
         ptr
     }
@@ -24,4 +35,4 @@ unsafe impl GlobalAlloc for Allocator {
 }
 
 #[global_allocator]
-static ALLOCATOR: Allocator = Allocator { top: UnsafeCell::new(0x7fffff as *mut u8) };
+static ALLOCATOR: Allocator = Allocator { top: Cell::new(ptr::addr_of!(HEAP_BEGIN) as *mut u8) };

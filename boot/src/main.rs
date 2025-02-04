@@ -3,19 +3,22 @@
 
 extern crate alloc;
 
-use alloc::alloc::alloc;
-use anyhow::{anyhow, Result};
 use core::alloc::Layout;
 use core::{mem, ptr};
+use alloc::alloc::alloc;
+use anyhow::{anyhow, Result};
 use elf::ElfBytes;
 use elf::abi::PT_LOAD;
 use elf::endian::LittleEndian;
 use uefi::println;
 use uefi::prelude::*;
-use uefi::boot::MemoryType;
+use uefi::boot::{MemoryType, SearchType};
 use uefi::fs::FileSystem;
 use uefi::mem::memory_map::MemoryMap;
 use uefi::proto::console::gop::{GraphicsOutput, PixelFormat};
+use uefi::proto::device_path::text::{AllowShortcuts, DisplayOnly};
+use uefi::proto::device_path::DevicePath;
+use uefi::table::cfg::ACPI2_GUID;
 use x86_64::{addr, PhysAddr, VirtAddr};
 use x86_64::registers::control::Cr3;
 use x86_64::structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageSize, PageTable, PageTableFlags, PhysFrame, Size2MiB, Size4KiB};
@@ -25,7 +28,8 @@ const KERNEL_END: u64 = 0xffffffffffffffff;
 const KERNEL_SIZE: u64 = KERNEL_END - KERNEL_START + 1;
 
 type Framebuffer<'a> = &'a mut [[u32; 1920]; 1080];
-type Start = extern "sysv64" fn(Framebuffer) -> !;
+type ACPI = *const ();
+type Start = extern "sysv64" fn(Framebuffer, ACPI) -> !;
 
 #[derive(Clone, Copy)]
 struct MemoryPool {
@@ -156,11 +160,26 @@ fn init() -> Result<()> {
     let start = load_kernel(pool)?;
     setup_paging(pool)?;
 
+    //let buf = boot::locate_handle_buffer(SearchType::from_proto::<DevicePath>())?;
+    //for h in &*buf {
+    //    let Ok(devpath) = boot::open_protocol_exclusive::<DevicePath>(*h) else { continue; };
+
+    //    println!("{}", devpath.to_string(DisplayOnly(false), AllowShortcuts(false))?);
+    //}
+
+    //loop {}
+
+    let acpi = system::with_config_table(|entries| {
+        entries.iter()
+            .find(|e| e.guid == ACPI2_GUID)
+            .map(|e| e.address as *const ())
+    }).ok_or(anyhow!("ACPI Table not found"))?;
+
     let fb = setup_video()?;
 
     unsafe { boot::exit_boot_services(MemoryType::BOOT_SERVICES_DATA); }
 
-    start(fb);
+    start(fb, acpi);
 
     Ok(())
 }
