@@ -8,4 +8,4 @@ rusttype = { version = "0.9.3", default-features = false, features = ["libm-math
 pc-keyboard = "0.8.0"
 x86_64 = "0.15.2"
 acpi = "5.1.0"
-anyhow = "1.0.95"
+anyhow = { version = "1.0.95", default-features = false }

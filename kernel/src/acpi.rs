@@ -1,10 +1,10 @@
 use core::ptr::NonNull;
-
-use crate::println;
 use acpi::{AcpiHandler, AcpiTables, PhysicalMapping};
 
+use crate::println;
+
 #[derive(Clone)]
-struct AcpiMapper {}
+struct AcpiMapper;
 
 impl AcpiHandler for AcpiMapper {
     unsafe fn map_physical_region<T>(&self, physical_address: usize, size: usize) -> PhysicalMapping<Self, T> {
@@ -15,6 +15,8 @@ impl AcpiHandler for AcpiMapper {
     fn unmap_physical_region<T>(_region: &PhysicalMapping<Self, T>) {}
 }
 
-pub fn parse(acpi: *const ()) {
-    let acpi = unsafe { AcpiTables::from_rsdp(AcpiMapper {}, acpi as usize).unwrap() };
+pub fn parse(addr: usize) {
+    let acpi = unsafe { AcpiTables::from_rsdp(AcpiMapper, addr).unwrap() };
+
+    // acpi.find_table::<>()
 }
