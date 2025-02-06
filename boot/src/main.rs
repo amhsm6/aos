@@ -171,15 +171,21 @@ fn load_kernel(mem: &Memory) -> Result<Start> {
         .ok_or(anyhow!("Elf does not contain segments"))?
         .into_iter()
         .filter(|phdr| phdr.p_type == PT_LOAD)
-        .for_each(|phdr| unsafe {
-            let src = buf.as_ptr().add(phdr.p_offset as usize);
+        .map(|phdr| {
+            let src = elf.segment_data(&phdr)?;
             let dst = (mem.kernel.start + phdr.p_paddr) as *mut u8;
+            let size = phdr.p_memsz as usize;
 
-            println!("Copy {} bytes to 0x{:x} -- 0x{:x}", phdr.p_memsz, dst as u64, dst as u64 + phdr.p_memsz);
+            println!("Copy {} bytes to 0x{:x} -- 0x{:x}", size, dst as u64, dst as usize + size);
 
-            ptr::write_bytes(dst, 0, phdr.p_memsz as usize);
-            ptr::copy(src, dst, phdr.p_filesz as usize);
-        });
+            unsafe {
+                ptr::write_bytes(dst, 0, size);
+                ptr::copy(src.as_ptr(), dst, src.len());
+            }
+
+            Ok(())
+        })
+        .collect::<Result<()>>()?;
 
     unsafe { Ok(mem::transmute(elf.ehdr.e_entry)) }
 }
@@ -237,6 +243,8 @@ fn init() -> Result<()> {
     let acpi = find_acpi()?;
     wait_for_key()?;
     let fb = setup_video()?;
+
+    println!("[+] Starting Kernel");
 
     unsafe {
         mem.install();
