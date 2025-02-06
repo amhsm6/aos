@@ -16,7 +16,10 @@ impl AcpiHandler for AcpiMapper {
 }
 
 pub fn parse(addr: usize) {
+    println!("Parsing");
     let acpi = unsafe { AcpiTables::from_rsdp(AcpiMapper, addr).unwrap() };
 
-    // acpi.find_table::<>()
+    for h in acpi.headers() {
+        println!("{h:?}");
+    }
 }

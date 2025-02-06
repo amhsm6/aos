@@ -20,7 +20,7 @@
 
 */
 
-ENTRY(_start)
+ENTRY(kstart)
 
 SECTIONS {
     _kernel_begin = 0xffffffffaf000000;
@@ -36,8 +36,8 @@ SECTIONS {
     .text : AT(0) {
         KEEP(*(.ltext.astart))
 
-        _start = .;
-        KEEP(*(.ltext._start))
+        kstart = .;
+        KEEP(*(.ltext.kstart))
 
         *(.ltext*)
     }
