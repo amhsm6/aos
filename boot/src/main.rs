@@ -14,10 +14,11 @@ use elf::endian::LittleEndian;
 use uefi::mem::memory_map::MemoryMap;
 use uefi::println;
 use uefi::prelude::*;
-use uefi::boot::MemoryType;
+use uefi::boot::{get_handle_for_protocol, MemoryType};
 use uefi::fs::FileSystem;
 use uefi::proto::console::gop::{GraphicsOutput, PixelFormat};
 use uefi::proto::console::text::Input;
+use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::cfg::ACPI2_GUID;
 use x86_64::{addr, PhysAddr, VirtAddr};
 use x86_64::registers::control::Cr3;
@@ -59,7 +60,6 @@ struct Memory<'a> {
     falloc:     FAllocator
 }
 
-// TODO: Exclude kernel address space from mapping
 // TODO: pass memory map to kernel
 impl<'a> Memory<'a> {
     fn build() -> Result<Memory<'a>> {
@@ -120,8 +120,13 @@ impl<'a> Memory<'a> {
         println!("[+] Mapping Memory");
 
         self.map_pool(self.kernel, KERNEL_START)?;
-        self.map_pool(self.global, self.global.start)?;
-        self.map_pool(self.global, self.global.start + HI_START)?;
+
+        //self.map_pool(MemoryPool { start: self.global.start, end: self.kernel.start }, self.global.start + HI_START)?;
+        //self.map_pool(MemoryPool { start: self.kernel.end, end: self.global.end }, self.kernel.start + HI_START)?;
+
+        // TODO: remove
+        self.map_pool(MemoryPool { start: self.global.start, end: self.kernel.start }, self.global.start)?;
+        self.map_pool(MemoryPool { start: self.kernel.end, end: self.global.end }, self.kernel.start)?;
 
         Ok(())
     }
@@ -229,12 +234,16 @@ fn setup_video<'a>() -> Result<Framebuffer<'a>> {
     gop.set_mode(&mode)?;
 
     let ptr = gop.frame_buffer().as_mut_ptr() as *mut [[u32; 1920]; 1080];
-    unsafe { Ok(&mut *ptr.byte_add(HI_START as usize)) }
+    unsafe { Ok(&mut *ptr.byte_add(0 as usize)) }
 }
 
 fn init() -> Result<()> {
     uefi::helpers::init()?;
     system::with_stdout(|stdout| stdout.clear())?;
+
+    let limg = boot::open_protocol_exclusive::<LoadedImage>(get_handle_for_protocol::<LoadedImage>()?)?;
+    let base = limg.info().0 as u64;
+    println!("0x{base:x}");
 
     let mut mem = Memory::build()?;
     unsafe { mem.map()? };
@@ -245,11 +254,20 @@ fn init() -> Result<()> {
     let fb = setup_video()?;
 
     println!("[+] Starting Kernel");
+    unsafe {core::arch::asm!("mov rax, 0x1509");}
+    unsafe {core::arch::asm!("15: jmp 15b");}
 
     unsafe {
         mem.install();
         boot::exit_boot_services(MemoryType::BOOT_SERVICES_DATA);
     }
+
+    for i in 0..100 {
+        for j in 0..100 {
+            fb[j][i] = 255 << 16 | 255 << 8 | 255;
+        }
+    }
+    loop {}
 
     start(fb, acpi);
 
