@@ -1,4 +1,9 @@
-kernel.elf = target/x86_64-unknown-none/release/kernel
+MODE ?= debug
+ifeq ($(MODE), release)
+	CARGO_MODE = --release
+endif
+
+kernel.elf = target/x86_64-unknown-none/$(MODE)/kernel
 boot.efi = target/x86_64-unknown-uefi/release/boot.efi
 
 build: image
@@ -18,7 +23,7 @@ image: $(kernel.elf) $(boot.efi)
 	sudo umount esp
 
 $(kernel.elf): kernel/src/*
-	cd kernel; cargo build --release
+	cd kernel; cargo build $(CARGO_MODE)
 
 $(boot.efi): boot/src/*
 	cd boot; cargo build --release

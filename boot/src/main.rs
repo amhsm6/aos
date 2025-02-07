@@ -106,7 +106,7 @@ impl Memory {
     unsafe fn map_pool(&mut self, page_table: &mut OffsetPageTable, pool: MemoryPool, vstart: u64) -> Result<()> {
         let pstart = pool.start;
         let pend = pool.end - 1;
-        let vend = vstart + pend - pstart;
+        let vend = vstart + (pend - pstart);
 
         println!("Mapping 0x{:x} -- 0x{:x} to 0x{:x} -- 0x{:x}", pstart, pend, vstart, vend);
 

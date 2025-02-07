@@ -1,6 +1,6 @@
 use core::ptr::NonNull;
-use acpi::{AcpiHandler, AcpiTables, PhysicalMapping};
-use anyhow::{anyhow, Error, Result};
+use acpi::{mcfg::Mcfg, AcpiHandler, AcpiTables, PhysicalMapping};
+use anyhow::{anyhow, Result};
 
 use crate::println;
 
@@ -20,8 +20,12 @@ pub fn parse(addr: usize) -> Result<()> {
     println!("Parsing...");
     let acpi = unsafe { AcpiTables::from_rsdp(AcpiMapper, addr).map_err(|e| anyhow!("{e:?}"))? };
 
-    for h in acpi.headers() {
-        println!("{h:?}");
+    let mcfg = acpi.find_table::<Mcfg>().map_err(|e| anyhow!("{e:?}"))?;
+    println!("0x{:x}", mcfg.physical_start());
+    for entry in mcfg.entries() {
+       let base = entry.base_address;
+       let seggroup = entry.pci_segment_group;
+       println!("0x{:x}: SEGGROUP {} BUS {} - {}", base, seggroup, entry.bus_number_start, entry.bus_number_end);
     }
 
     Ok(())

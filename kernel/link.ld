@@ -14,9 +14,9 @@
 0xffffffffffefffff
 0xfffffffffff00000
 |
-| STACK (1MB)
+| STACK (~1MB)
 |
-0xffffffffffffffff
+0xfffffffffffffff0
 
 */
 
@@ -30,7 +30,8 @@ SECTIONS {
     _heap_size = 512M;
 
     _stack_begin = 0xfffffffffff00000;
-    _stack_size = 1M;
+    _stack_end = 0xfffffffffffffff0;
+    _stack_size = _stack_end - _stack_begin + 1;
 
     . = _kernel_begin;
     .text : AT(0) {
