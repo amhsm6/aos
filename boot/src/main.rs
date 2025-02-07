@@ -213,7 +213,7 @@ fn find_acpi(mem: &Memory) -> Result<ACPIAddr> {
     system::with_config_table(|entries| {
         entries.iter()
             .find(|e| e.guid == ACPI2_GUID)
-            .map(|e| e.address as u64 + HI_START)
+            .map(|e| e.address as u64 + HI_START - (mem.kernel.end - mem.kernel.start))
     }).ok_or(anyhow!("ACPI Table not found"))
 }
 
@@ -256,7 +256,7 @@ fn init() -> Result<()> {
     let mut mem = Memory::build()?;
     unsafe { mem.map_st1()? };
 
-    let start = load_kernel(&mem)?;
+    let kstart = load_kernel(&mem)?;
     let acpi = find_acpi(&mem)?;
     let ptframe = unsafe { mem.map_st2()? };
     wait_for_key()?;
@@ -269,7 +269,7 @@ fn init() -> Result<()> {
         boot::exit_boot_services(MemoryType::BOOT_SERVICES_DATA);
     }
 
-    start(ptframe, acpi, fb);
+    kstart(ptframe, acpi, fb);
 
     Ok(())
 }
