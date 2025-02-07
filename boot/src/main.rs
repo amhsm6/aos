@@ -21,17 +21,15 @@ use uefi::proto::console::text::Input;
 use uefi::table::cfg::ACPI2_GUID;
 use x86_64::{addr, PhysAddr, VirtAddr};
 use x86_64::registers::control::Cr3;
-use x86_64::structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageSize, PageTable, PageTableFlags, PhysFrame, Size2MiB, Size4KiB};
+use x86_64::structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageSize, PageTable, PageTableFlags, PhysFrame, Size2MiB};
 
-const HI_START:     u64 = 0xffff800000000000;
 const KERNEL_START: u64 = 0xffffffffaf000000;
 const KERNEL_END:   u64 = 0xffffffffffffffff;
 const KERNEL_SIZE:  u64 = KERNEL_END - KERNEL_START + 1;
 
-type PTFrame = u64;
 type ACPIAddr = u64;
 type Framebuffer<'a> = &'a mut [[u32; 1920]; 1080];
-type KStart = extern "sysv64" fn(PTFrame, ACPIAddr, Framebuffer) -> !;
+type KStart = extern "sysv64" fn(ACPIAddr, Framebuffer) -> !;
 
 #[derive(Clone, Copy)]
 struct MemoryPool {
@@ -39,28 +37,14 @@ struct MemoryPool {
     end:   u64
 }
 
-struct FAllocator;
-
-unsafe impl<S: PageSize> FrameAllocator<S> for FAllocator {
-    fn allocate_frame(&mut self) -> Option<PhysFrame<S>> {
-        unsafe {
-            let layout = Layout::from_size_align(S::SIZE as usize, S::SIZE as usize).ok()?;
-            let ptr = alloc(layout);
-            PhysFrame::from_start_address(PhysAddr::new(ptr as u64)).ok()
-        }
-    }
+struct Memory {
+    kernel: MemoryPool,
+    global: MemoryPool,
+    free:   Vec<MemoryPool>
 }
 
-struct Memory<'a> {
-    kernel:     MemoryPool,
-    global:     MemoryPool,
-    free:       Vec<MemoryPool>,
-    page_table: Option<(PhysFrame<Size4KiB>, OffsetPageTable<'a>)>,
-    falloc:     FAllocator
-}
-
-impl<'a> Memory<'a> {
-    fn build() -> Result<Memory<'a>> {
+impl Memory {
+    fn build() -> Result<Memory> {
         println!("[+] Building Memory Map");
 
         let mut kernel = None;
@@ -96,57 +80,30 @@ impl<'a> Memory<'a> {
             Memory {
                 kernel: kernel.ok_or(anyhow!("Not enough memory"))?,
                 global,
-                free,
-                page_table: None,
-                falloc: FAllocator
+                free
             }
         )
     }
 
-    fn new_pt(&mut self) -> Result<()> {
-        if self.page_table.is_some() { return Err(anyhow!("Page Table already exists")); }
+    unsafe fn map(&mut self) -> Result<()> {
+        println!("[+] Mapping Memory");
 
-        let ptframe: PhysFrame<Size4KiB> = self.falloc.allocate_frame().ok_or(anyhow!("Unable to allocate Page Table"))?;
-        
-        let page_table = unsafe {
-            let page_table = &mut *(ptframe.start_address().as_u64() as *mut PageTable);
-            page_table.zero();
-            OffsetPageTable::new(page_table, VirtAddr::zero())
-        };
+        let ptframe = self.allocate_frame().ok_or(anyhow!("Unable to allocate frame"))?;
 
-        self.page_table = Some((ptframe, page_table));
+        let pt = &mut *(ptframe.start_address().as_u64() as *mut PageTable);
+        pt.zero();
+        let mut page_table = OffsetPageTable::new(pt, VirtAddr::zero());
 
-        Ok(())
-    }
+        self.map_pool(&mut page_table, self.kernel, KERNEL_START)?;
+        self.map_pool(&mut page_table, MemoryPool { start: self.global.start, end: self.kernel.start }, 0)?;
+        self.map_pool(&mut page_table, MemoryPool { start: self.kernel.end, end: self.global.end }, self.kernel.end)?;
 
-    unsafe fn map_st1(&mut self) -> Result<()> {
-        println!("[+] Mapping Memory Stage 1");
-
-        self.new_pt()?;
-
-        self.map_pool(self.kernel, KERNEL_START)?;
-        self.map_pool(self.global, 0)?;
-
-        let (ptframe, _) = self.page_table.take().unwrap();
         Cr3::write(ptframe, Cr3::read().1);
 
         Ok(())
     }
 
-    unsafe fn map_st2(&mut self) -> Result<u64> {
-        println!("[+] Mapping Memory Stage 2");
-
-        self.new_pt()?;
-
-        self.map_pool(self.kernel, KERNEL_START)?;
-        self.map_pool(MemoryPool { start: self.global.start, end: self.kernel.start }, self.global.start + HI_START)?;
-        self.map_pool(MemoryPool { start: self.kernel.end, end: self.global.end }, self.kernel.start + HI_START)?;
-
-        let (ptframe, _) = self.page_table.take().unwrap();
-        Ok(ptframe.start_address().as_u64())
-    }
-
-    unsafe fn map_pool(&mut self, pool: MemoryPool, vstart: u64) -> Result<()> {
+    unsafe fn map_pool(&mut self, page_table: &mut OffsetPageTable, pool: MemoryPool, vstart: u64) -> Result<()> {
         let pstart = pool.start;
         let pend = pool.end - 1;
         let vend = vstart + pend - pstart;
@@ -163,15 +120,24 @@ impl<'a> Memory<'a> {
 
         if pages.len() != frames.len() { return Err(anyhow!("Incorrect mapping")); }
 
-        let (_, page_table) = self.page_table.as_mut().ok_or(anyhow!("Page Table not initialized"))?;
         for (page, frame) in pages.zip(frames) {
             page_table
-                .map_to(page, frame, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, &mut self.falloc)
+                .map_to(page, frame, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, self)
                 .map_err(|e| anyhow!("{e:?}"))?
                 .flush();
         }
 
         Ok(())
+    }
+}
+
+unsafe impl<S: PageSize> FrameAllocator<S> for Memory {
+    fn allocate_frame(&mut self) -> Option<PhysFrame<S>> {
+        unsafe {
+            let layout = Layout::from_size_align(S::SIZE as usize, S::SIZE as usize).ok()?;
+            let ptr = alloc(layout);
+            PhysFrame::from_start_address(PhysAddr::new(ptr as u64)).ok()
+        }
     }
 }
 
@@ -207,13 +173,13 @@ fn load_kernel(mem: &Memory) -> Result<KStart> {
     unsafe { Ok(mem::transmute(elf.ehdr.e_entry)) }
 }
 
-fn find_acpi(mem: &Memory) -> Result<ACPIAddr> {
+fn find_acpi() -> Result<ACPIAddr> {
     println!("[+] Locating ACPI Table");
 
     system::with_config_table(|entries| {
         entries.iter()
             .find(|e| e.guid == ACPI2_GUID)
-            .map(|e| e.address as u64 + HI_START - (mem.kernel.end - mem.kernel.start))
+            .map(|e| e.address as u64)
     }).ok_or(anyhow!("ACPI Table not found"))
 }
 
@@ -228,9 +194,7 @@ fn wait_for_key() -> Result<()> {
 }
 
 // TODO: remove
-fn setup_video<'a>(mem: &Memory) -> Result<Framebuffer<'a>> {
-    println!("[+] Initializing Graphic Mode");
-
+fn setup_video<'a>() -> Result<Framebuffer<'a>> {
     let gop_handle = boot::get_handle_for_protocol::<GraphicsOutput>()?;
     let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(gop_handle)?;
 
@@ -246,7 +210,7 @@ fn setup_video<'a>(mem: &Memory) -> Result<Framebuffer<'a>> {
     gop.set_mode(&mode)?;
 
     let ptr = gop.frame_buffer().as_mut_ptr() as *mut [[u32; 1920]; 1080];
-    unsafe { Ok(&mut *ptr.byte_add(HI_START as usize - (mem.kernel.end - mem.kernel.start) as usize)) }
+    unsafe { Ok(&mut *ptr) }
 }
 
 fn init() -> Result<()> {
@@ -254,22 +218,21 @@ fn init() -> Result<()> {
     system::with_stdout(|stdout| stdout.clear())?;
 
     let mut mem = Memory::build()?;
-    unsafe { mem.map_st1()? };
 
     let kstart = load_kernel(&mem)?;
-    let acpi = find_acpi(&mem)?;
-    let ptframe = unsafe { mem.map_st2()? };
+    let acpi = find_acpi()?;
+    unsafe { mem.map()? };
     wait_for_key()?;
 
-    let fb = setup_video(&mem)?;
-
     println!("[+] Starting Kernel");
+
+    let fb = setup_video()?;
 
     unsafe {
         boot::exit_boot_services(MemoryType::BOOT_SERVICES_DATA);
     }
 
-    kstart(ptframe, acpi, fb);
+    kstart(acpi, fb);
 
     Ok(())
 }
