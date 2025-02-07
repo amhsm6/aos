@@ -12,7 +12,7 @@ static mut PRINTER: Option<Printer<'static>> = None;
 impl Printer<'static> {
     pub fn init_global(fb: Framebuffer<'static>, bytes: &'static [u8], scale: f32, color: Color) {
         unsafe {
-            PRINTER = Some(Printer::new(fb, bytes, scale, color));
+            PRINTER = Some(Printer::new(fb, bytes, scale, color).unwrap());
         }
     }
 }

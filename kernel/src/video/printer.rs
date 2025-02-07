@@ -1,4 +1,5 @@
 use core::fmt::Write;
+use anyhow::{anyhow, Result};
 use rusttype::{Font, Scale, Point};
 
 use crate::video::framebuffer::{Framebuffer, Pixel, HRES};
@@ -24,14 +25,14 @@ pub struct Printer<'a> {
 }
 
 impl<'a> Printer<'a> {
-    pub fn new(fb: Framebuffer<'a>, bytes: &'a [u8], scale: f32, color: Color) -> Printer<'a> {
-        let font = Font::try_from_bytes(bytes).unwrap();
+    pub fn new(fb: Framebuffer<'a>, bytes: &'a [u8], scale: f32, color: Color) -> Result<Printer<'a>> {
+        let font = Font::try_from_bytes(bytes).ok_or(anyhow!("Error parsing font"))?;
         let scale = Scale::uniform(scale);
 
         let v_metrics = font.v_metrics(scale);
         let pos = rusttype::point(0.0, v_metrics.ascent + v_metrics.line_gap);
 
-        Printer { fb, font, scale, color, pos }
+        Ok(Printer { fb, font, scale, color, pos })
     }
 
     pub fn newline(&mut self) {
@@ -40,10 +41,10 @@ impl<'a> Printer<'a> {
         self.pos.y += v_metrics.ascent - v_metrics.descent + v_metrics.line_gap;
     }
 
-    pub fn put_char(&mut self, c: char) {
+    pub fn put_char(&mut self, c: char) -> Result<()> {
         if c == '\n' {
             self.newline();
-            return;
+            return Ok(());
         }
 
         let glyph = self.font.glyph(c).scaled(self.scale);
@@ -60,11 +61,12 @@ impl<'a> Printer<'a> {
             }
 
             glyph.set_position(self.pos);
-            let bounds = glyph.pixel_bounding_box().unwrap();
+            let bounds = glyph.pixel_bounding_box().expect("Impossible");
 
             glyph.draw(|x, y, a| {
                 let x = bounds.min.x as usize + x as usize;
                 let y = bounds.min.y as usize + y as usize;
+
                 let p = Pixel {
                     red:   (self.color.r * a) as u8,
                     green: (self.color.g * a) as u8,
@@ -76,15 +78,16 @@ impl<'a> Printer<'a> {
         }
 
         self.pos = self.pos + rusttype::vector(h_metrics.advance_width, 0.0);
+
+        Ok(())
     }
 }
 
 impl<'a> Write for Printer<'a> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        for c in s.chars() {
-            self.put_char(c);
-        }
-
-        Ok(())
+        s.chars()
+            .map(|c| self.put_char(c))
+            .map(|r| r.map_err(|_| core::fmt::Error))
+            .collect()
     }
 }

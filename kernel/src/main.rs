@@ -17,13 +17,12 @@ use video::printer::{Color, Printer};
 extern "sysv64" fn astart(acpi: usize, fb: Framebuffer<'static>) -> ! {
     Printer::init_global(fb, video::fonts::SF_PRO, 40.0, Color::new(255.0, 255.0, 255.0));
     
-    println!("0x{acpi:x}");
     acpi::parse(acpi);
 
     let mut kb = Keyboard::new();
 
     loop {
-        if let Some(x) = kb.read_char() {
+        if let Some(x) = kb.read_char().unwrap() {
             print!("{x}");
         }
     }

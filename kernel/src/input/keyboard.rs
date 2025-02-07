@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use pc_keyboard::{ScancodeSet, ScancodeSet1, EventDecoder, HandleControl, DecodedKey};
 use pc_keyboard::layouts::Us104Key;
 use x86_64::instructions::port::Port;
@@ -19,24 +20,27 @@ impl Keyboard {
         }
     }
 
-    pub fn read_char(&mut self) -> Option<char> {
+    pub fn read_char(&mut self) -> Result<Option<char>> {
         let data = unsafe {
             let status = self.status_port.read();
-            if status & 1 == 0 { return None; }
+            if status & 1 == 0 { return Ok(None); }
 
             self.data_port.read()
         };
 
-        let event = self.scancode_set.advance_state(data).unwrap();
-        if event.is_none() { return None; }
+        let Some(event) = self.scancode_set.advance_state(data).map_err(|e| anyhow!("{e:?}"))? else {
+            return Ok(None);
+        };
         
-        self.event_decoder
-            .process_keyevent(event.unwrap())
-            .and_then(|x| {
-                match x {
-                    DecodedKey::Unicode(x) => Some(x),
-                    _ => None
-                }
-            })
+        Ok(
+            self.event_decoder
+                .process_keyevent(event)
+                .and_then(|x| {
+                    match x {
+                        DecodedKey::Unicode(x) => Some(x),
+                        _                            => None
+                    }
+                })
+        )
     }
 }

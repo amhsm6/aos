@@ -1,5 +1,6 @@
 use core::ptr::NonNull;
 use acpi::{AcpiHandler, AcpiTables, PhysicalMapping};
+use anyhow::{anyhow, Error, Result};
 
 use crate::println;
 
@@ -15,11 +16,13 @@ impl AcpiHandler for AcpiMapper {
     fn unmap_physical_region<T>(_region: &PhysicalMapping<Self, T>) {}
 }
 
-pub fn parse(addr: usize) {
-    println!("Parsing");
-    let acpi = unsafe { AcpiTables::from_rsdp(AcpiMapper, addr).unwrap() };
+pub fn parse(addr: usize) -> Result<()> {
+    println!("Parsing...");
+    let acpi = unsafe { AcpiTables::from_rsdp(AcpiMapper, addr).map_err(|e| anyhow!("{e:?}"))? };
 
     for h in acpi.headers() {
         println!("{h:?}");
     }
+
+    Ok(())
 }
