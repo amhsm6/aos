@@ -4,14 +4,13 @@
 |
 | KERNEL (512MB)
 |
-0xffffffffceffffff
+0xffffffffcf000000
 |
 *
 0xffffffffdff00000
 |
 | HEAP (512MB)
 |
-0xffffffffffefffff
 0xfffffffffff00000
 |
 | STACK (~1MB)
@@ -31,7 +30,7 @@ SECTIONS {
 
     _stack_begin = 0xfffffffffff00000;
     _stack_end = 0xfffffffffffffff0;
-    _stack_size = _stack_end - _stack_begin + 1;
+    _stack_size = _stack_end - _stack_begin;
 
     . = _kernel_begin;
     .text : AT(0) {
@@ -58,14 +57,14 @@ SECTIONS {
 
     . = _heap_begin;
     .heap (NOLOAD) : AT(_heap_begin - _kernel_begin) {
-        . += _heap_size - 1;
+        . += _heap_size;
     }
     _heap_end = .;
 
     . = _stack_begin;
     .stack (NOLOAD) : AT(_stack_begin - _kernel_begin) {
         _stack_bottom = .;
-        . += _stack_size - 1;
+        . += _stack_size;
         _stack_top = .;
     }
     _stack_end = .;
@@ -73,6 +72,4 @@ SECTIONS {
     /DISCARD/ : { *(.eh_frame*) *(.comment*) }
 }
 
-ASSERT(_kernel_end - _kernel_begin + 1 <= _kernel_size, "ERROR: Kernel exceeding size limit");
-ASSERT(_heap_end - _heap_begin + 1 <= _heap_size, "ERROR: Heap exceeding size limit");
-ASSERT(_stack_end - _stack_begin + 1 <= _stack_size, "ERROR: Stack exceeding size limit");
+ASSERT(_kernel_end - _kernel_begin <= _kernel_size, "ERROR: Kernel exceeding size limit");

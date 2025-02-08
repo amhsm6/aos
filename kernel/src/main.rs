@@ -1,6 +1,5 @@
 #![no_main]
 #![no_std]
-#![deny(unused_must_use)]
 
 mod acpi;
 mod alloc;
@@ -17,7 +16,7 @@ use video::printer::{Color, Printer};
 #[link_section = ".ltext.astart"]
 extern "sysv64" fn astart(acpi: usize, fb: Framebuffer<'static>) -> ! {
     Printer::init_global(fb, video::fonts::SF_PRO, 40.0, Color::new(255.0, 255.0, 255.0));
-    
+
     acpi::parse(acpi).unwrap();
 
     let mut kb = Keyboard::new();

@@ -4,7 +4,7 @@ ifeq ($(MODE), release)
 endif
 
 kernel.elf = target/x86_64-unknown-none/$(MODE)/kernel
-boot.efi = target/x86_64-unknown-uefi/release/boot.efi
+boot.efi = target/x86_64-unknown-uefi/$(MODE)/boot.efi
 
 build: image
 
@@ -26,7 +26,7 @@ $(kernel.elf): kernel/src/*
 	cd kernel; cargo build $(CARGO_MODE)
 
 $(boot.efi): boot/src/*
-	cd boot; cargo build --release
+	cd boot; cargo build $(CARGO_MODE)
 
 clean:
 	cargo clean

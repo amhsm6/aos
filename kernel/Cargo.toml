@@ -3,6 +3,9 @@ name = "kernel"
 version = "0.1.0"
 edition = "2021"
 
+[lints.rust]
+unused_must_use = { level = "forbid" }
+
 [dependencies]
 rusttype = { version = "0.9.3", default-features = false, features = ["libm-math"] }
 pc-keyboard = "0.8.0"

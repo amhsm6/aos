@@ -83,11 +83,10 @@ impl<'a> Printer<'a> {
     }
 }
 
-impl<'a> Write for Printer<'a> {
+impl Write for Printer<'_> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         s.chars()
             .map(|c| self.put_char(c))
-            .map(|r| r.map_err(|_| core::fmt::Error))
-            .collect()
+            .try_for_each(|r| r.map_err(|_| core::fmt::Error))
     }
 }
