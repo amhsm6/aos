@@ -16,9 +16,9 @@ impl AcpiHandler for AcpiMapper {
     fn unmap_physical_region<T>(_region: &PhysicalMapping<Self, T>) {}
 }
 
-pub fn parse(addr: usize) -> Result<()> {
+pub fn parse(addr: u64) -> Result<()> {
     println!("Parsing...");
-    let acpi = unsafe { AcpiTables::from_rsdp(AcpiMapper, addr).map_err(|e| anyhow!("{e:?}"))? };
+    let acpi = unsafe { AcpiTables::from_rsdp(AcpiMapper, addr as usize).map_err(|e| anyhow!("{e:?}"))? };
 
     let mcfg = acpi.find_table::<Mcfg>().map_err(|e| anyhow!("{e:?}"))?;
     println!("0x{:x}", mcfg.physical_start());

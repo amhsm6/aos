@@ -1,17 +1,19 @@
 #![no_std]
 #![no_main]
 
+mod alloc;
+
 use core::panic::PanicInfo;
 
-use kernel::mem::MemoryPool;
 use kernel::{print, println};
 use kernel::drivers::keyboard::Keyboard;
 use kernel::drivers::video::framebuffer::Framebuffer;
 use kernel::drivers::video::printer::{Color, Printer};
+use kernel::mem::MemoryPool;
 
 #[no_mangle]
 #[link_section = ".ltext.astart"]
-extern "sysv64" fn astart(acpi: usize, free: &[MemoryPool], fb: Framebuffer<'static>) -> ! {
+extern "sysv64" fn astart(acpi: u64, free: &[MemoryPool], fb: Framebuffer<'static>) -> ! {
     Printer::init_global(fb, kernel::drivers::video::fonts::SF_PRO, 40.0, Color::new(255.0, 255.0, 255.0));
 
     kernel::acpi::parse(acpi).unwrap();
