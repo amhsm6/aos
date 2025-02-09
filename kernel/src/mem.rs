@@ -1,6 +1,11 @@
+extern crate alloc;
+
+use core::alloc::Layout;
+use alloc::alloc::alloc;
 use anyhow::{anyhow, Error, Result};
 use x86_64::{PhysAddr, VirtAddr};
-use x86_64::structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageTableFlags, PhysFrame, Size2MiB, Size4KiB};
+use x86_64::registers::control::Cr3;
+use x86_64::structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageSize, PageTable, PageTableFlags, PhysFrame, Size2MiB, Size4KiB};
 
 pub const KERNEL_START: u64 = 0xffffffffaf000000;
 pub const KERNEL_END:   u64 = 0xffffffffffffffff;
@@ -37,4 +42,24 @@ impl MemoryPool {
 
         Ok(())
     }
+}
+
+pub struct GlobalFrameAllocator;
+
+unsafe impl<S: PageSize> FrameAllocator<S> for GlobalFrameAllocator {
+    fn allocate_frame(&mut self) -> Option<PhysFrame<S>> {
+        unsafe {
+            let layout = Layout::from_size_align(S::SIZE as usize, S::SIZE as usize).ok()?;
+            let ptr = alloc(layout);
+            PhysFrame::from_start_address(PhysAddr::new(ptr as u64)).ok()
+        }
+    }
+}
+
+pub unsafe fn map(pool: MemoryPool, virt: u64) -> Result<()> {
+    let (ptframe, _) = Cr3::read();
+    let pt = &mut *(ptframe.start_address().as_u64() as *mut PageTable);
+    let mut page_table = OffsetPageTable::new(pt, VirtAddr::zero());
+
+    pool.map(&mut page_table, &mut GlobalFrameAllocator, virt)
 }

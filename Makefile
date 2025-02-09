@@ -25,7 +25,7 @@ image: $(kernel.elf) $(boot.efi)
 $(kernel.elf): kernel/src/*
 	cd kernel; cargo build $(CARGO_MODE)
 
-$(boot.efi): boot/src/*
+$(boot.efi): $(kernel.elf) boot/src/*
 	cd boot; cargo build $(CARGO_MODE)
 
 clean:

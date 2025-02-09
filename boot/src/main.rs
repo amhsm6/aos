@@ -3,9 +3,7 @@
 
 extern crate alloc;
 
-use core::alloc::Layout;
 use core::{mem, ptr};
-use alloc::alloc::alloc;
 use alloc::vec::Vec;
 use anyhow::{anyhow, Result};
 use elf::ElfBytes;
@@ -19,11 +17,11 @@ use uefi::fs::FileSystem;
 use uefi::proto::console::gop::{GraphicsOutput, PixelFormat};
 use uefi::proto::console::text::Input;
 use uefi::table::cfg::ACPI2_GUID;
-use x86_64::{addr, PhysAddr, VirtAddr};
-use x86_64::registers::control::Cr3;
-use x86_64::structures::paging::{FrameAllocator, OffsetPageTable, PageSize, PageTable, PhysFrame, Size2MiB};
+use x86_64::addr;
+use x86_64::registers::control::{Cr3, Cr3Flags};
+use x86_64::structures::paging::{FrameAllocator, PageSize, PageTable, PhysFrame, Size2MiB, Size4KiB};
 
-use kernel::mem::{MemoryPool, KERNEL_END, KERNEL_SIZE, KERNEL_START};
+use kernel::mem::{GlobalFrameAllocator, MemoryPool, KERNEL_END, KERNEL_SIZE, KERNEL_START};
 use kernel::drivers::video::framebuffer::Framebuffer;
 
 // TODO: do not pass framebuffer
@@ -70,38 +68,31 @@ impl Memory {
         )
     }
 
-    unsafe fn map(&mut self) -> Result<()> {
-        println!("[+] Mapping Memory");
+    unsafe fn init() -> Result<()> {
+        println!("[+] Initializing Page Table");
 
-        let ptframe = self.allocate_frame().ok_or(anyhow!("Unable to allocate frame"))?;
-
+        let ptframe: PhysFrame<Size4KiB> = GlobalFrameAllocator.allocate_frame().ok_or(anyhow!("Unable to allocate Page Table"))?;
         let pt = &mut *(ptframe.start_address().as_u64() as *mut PageTable);
         pt.zero();
-        let mut page_table = OffsetPageTable::new(pt, VirtAddr::zero());
 
-        println!("Mapping 0x{:x} -- 0x{:x} to 0x{:x} -- 0x{:x}", self.kernel.start, self.kernel.end - 1, KERNEL_START, KERNEL_END);
-        let kpool = self.kernel;
-        kpool.map(&mut page_table, self, KERNEL_START)?;
-
-        let (oldptframe, flags) = Cr3::read();
-        let oldpt = & *(oldptframe.start_address().as_u64() as *const PageTable);
-        for (i, entry) in oldpt.iter().enumerate() {
+        let (pt2frame, _) = Cr3::read();
+        let pt2 = &*(pt2frame.start_address().as_u64() as *const PageTable);
+        for (i, entry) in pt2.iter().enumerate() {
             if !entry.is_unused() { pt[i] = entry.clone(); }
         }
 
-        Cr3::write(ptframe, flags);
+        Cr3::write(ptframe, Cr3Flags::empty());
 
         Ok(())
     }
-}
 
-unsafe impl<S: PageSize> FrameAllocator<S> for Memory {
-    fn allocate_frame(&mut self) -> Option<PhysFrame<S>> {
-        unsafe {
-            let layout = Layout::from_size_align(S::SIZE as usize, S::SIZE as usize).ok()?;
-            let ptr = alloc(layout);
-            PhysFrame::from_start_address(PhysAddr::new(ptr as u64)).ok()
-        }
+    unsafe fn map(&self) -> Result<()> {
+        println!("[+] Mapping Memory");
+
+        println!("Mapping 0x{:x} -- 0x{:x} to 0x{:x} -- 0x{:x}", self.kernel.start, self.kernel.end - 1, KERNEL_START, KERNEL_END);
+        kernel::mem::map(self.kernel, KERNEL_START)?;
+
+        Ok(())
     }
 }
 
@@ -180,7 +171,8 @@ fn init() -> Result<()> {
     uefi::helpers::init()?;
     system::with_stdout(|stdout| stdout.clear())?;
 
-    let mut mem = Memory::build()?;
+    let mem = Memory::build()?;
+    unsafe { Memory::init()?; }
 
     let kstart = load_kernel(&mem)?;
     let acpi = find_acpi()?;
