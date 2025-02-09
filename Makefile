@@ -9,10 +9,10 @@ boot.efi = target/x86_64-unknown-uefi/$(MODE)/boot.efi
 build: image
 
 test: image
-	qemu-system-x86_64 -m 4G -bios /usr/share/ovmf/OVMF.fd -drive file=image -net none
+	qemu-system-x86_64 -m 4G -machine q35 -bios /usr/share/ovmf/OVMF.fd -drive file=image -net none
 
 debug: image
-	qemu-system-x86_64 -m 4G -bios /usr/share/ovmf/OVMF.fd -drive file=image -net none -s -S
+	qemu-system-x86_64 -m 4G -machine q35 -bios /usr/share/ovmf/OVMF.fd -drive file=image -net none -s -S
 
 image: $(kernel.elf) $(boot.efi)
 	mkdir -p esp

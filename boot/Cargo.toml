@@ -7,6 +7,7 @@ edition = "2021"
 unreachable_code = { level = "allow" }
 
 [dependencies]
+kernel = { path = "../kernel" }
 uefi = { version = "0.34.1", features = ["panic_handler", "alloc", "global_allocator"] }
 elf = { version = "0.7.4", default-features = false, features = ["nightly"] }
 x86_64 = "0.15.2"

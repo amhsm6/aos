@@ -1,23 +1,20 @@
-#![no_main]
 #![no_std]
-
-mod acpi;
-mod alloc;
-mod video;
-mod input;
+#![no_main]
 
 use core::panic::PanicInfo;
 
-use input::keyboard::Keyboard;
-use video::framebuffer::Framebuffer;
-use video::printer::{Color, Printer};
+use kernel::mem::MemoryPool;
+use kernel::{print, println};
+use kernel::drivers::keyboard::Keyboard;
+use kernel::drivers::video::framebuffer::Framebuffer;
+use kernel::drivers::video::printer::{Color, Printer};
 
 #[no_mangle]
 #[link_section = ".ltext.astart"]
-extern "sysv64" fn astart(acpi: usize, fb: Framebuffer<'static>) -> ! {
-    Printer::init_global(fb, video::fonts::SF_PRO, 40.0, Color::new(255.0, 255.0, 255.0));
+extern "sysv64" fn astart(acpi: usize, free: &[MemoryPool], fb: Framebuffer<'static>) -> ! {
+    Printer::init_global(fb, kernel::drivers::video::fonts::SF_PRO, 40.0, Color::new(255.0, 255.0, 255.0));
 
-    acpi::parse(acpi).unwrap();
+    kernel::acpi::parse(acpi).unwrap();
 
     let mut kb = Keyboard::new();
 

@@ -46,6 +46,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "elf",
+ "kernel",
  "uefi",
  "x86_64",
 ]

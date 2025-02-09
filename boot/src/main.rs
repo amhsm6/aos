@@ -1,5 +1,5 @@
-#![no_main]
 #![no_std]
+#![no_main]
 
 extern crate alloc;
 
@@ -7,7 +7,7 @@ use core::alloc::Layout;
 use core::{mem, ptr};
 use alloc::alloc::alloc;
 use alloc::vec::Vec;
-use anyhow::{anyhow, Error, Result};
+use anyhow::{anyhow, Result};
 use elf::ElfBytes;
 use elf::abi::PT_LOAD;
 use elf::endian::LittleEndian;
@@ -21,25 +21,17 @@ use uefi::proto::console::text::Input;
 use uefi::table::cfg::ACPI2_GUID;
 use x86_64::{addr, PhysAddr, VirtAddr};
 use x86_64::registers::control::Cr3;
-use x86_64::structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageSize, PageTable, PageTableFlags, PhysFrame, Size2MiB};
+use x86_64::structures::paging::{FrameAllocator, OffsetPageTable, PageSize, PageTable, PhysFrame, Size2MiB};
 
-const KERNEL_START: u64 = 0xffffffffaf000000;
-const KERNEL_END:   u64 = 0xffffffffffffffff;
-const KERNEL_SIZE:  u64 = KERNEL_END - KERNEL_START + 1;
+use kernel::mem::{MemoryPool, KERNEL_END, KERNEL_SIZE, KERNEL_START};
+use kernel::drivers::video::framebuffer::Framebuffer;
 
-type ACPIAddr = u64;
-type Framebuffer<'a> = &'a mut [[u32; 1920]; 1080];
-type KStart = extern "sysv64" fn(ACPIAddr, Framebuffer) -> !;
+// TODO: do not pass framebuffer
 
-#[derive(Clone, Copy)]
-struct MemoryPool {
-    start: u64,
-    end:   u64
-}
+type KStart = extern "sysv64" fn(u64, &[MemoryPool], Framebuffer) -> !;
 
 struct Memory {
     kernel: MemoryPool,
-    global: MemoryPool,
     free:   Vec<MemoryPool>
 }
 
@@ -48,19 +40,13 @@ impl Memory {
         println!("[+] Building Memory Map");
 
         let mut kernel = None;
-        let mut global = MemoryPool { start: u64::MAX, end: u64::MIN };
 
         let free = boot::memory_map(MemoryType::BOOT_SERVICES_DATA)?
             .entries()
-            .map(|e| (e.phys_start, e.phys_start + e.page_count * 4096, e.ty))
-            .inspect(|(start, end, _)| {
-                global.start = global.start.min(*start);
-                global.end = global.end.max(*end);
-            })
-            .filter(|(_, _, typ)| *typ == MemoryType::CONVENTIONAL)
-            .map(|(start, end, _)| {
-                let start = addr::align_up(start, Size2MiB::SIZE);
-                let end = addr::align_down(end, Size2MiB::SIZE);
+            .filter(|e| e.ty == MemoryType::CONVENTIONAL)
+            .map(|e| {
+                let start = addr::align_up(e.phys_start, Size2MiB::SIZE);
+                let end = addr::align_down(e.phys_start + e.page_count * 4096, Size2MiB::SIZE);
                 (start, end)
             })
             .filter(|(start, end)| end > start)
@@ -79,7 +65,6 @@ impl Memory {
         Ok(
             Memory {
                 kernel: kernel.ok_or(anyhow!("Not enough memory"))?,
-                global,
                 free
             }
         )
@@ -94,38 +79,17 @@ impl Memory {
         pt.zero();
         let mut page_table = OffsetPageTable::new(pt, VirtAddr::zero());
 
-        self.map_pool(&mut page_table, self.kernel, KERNEL_START)?;
-        self.map_pool(&mut page_table, MemoryPool { start: self.global.start, end: self.kernel.start }, 0)?;
-        self.map_pool(&mut page_table, MemoryPool { start: self.kernel.end, end: self.global.end }, self.kernel.end)?;
+        println!("Mapping 0x{:x} -- 0x{:x} to 0x{:x} -- 0x{:x}", self.kernel.start, self.kernel.end - 1, KERNEL_START, KERNEL_END);
+        let kpool = self.kernel;
+        kpool.map(&mut page_table, self, KERNEL_START)?;
 
-        Cr3::write(ptframe, Cr3::read().1);
-
-        Ok(())
-    }
-
-    unsafe fn map_pool(&mut self, page_table: &mut OffsetPageTable, pool: MemoryPool, vstart: u64) -> Result<()> {
-        let pstart = pool.start;
-        let pend = pool.end - 1;
-        let vend = vstart + (pend - pstart);
-
-        println!("Mapping 0x{:x} -- 0x{:x} to 0x{:x} -- 0x{:x}", pstart, pend, vstart, vend);
-
-        let vstart: Page<Size2MiB> = Page::from_start_address(VirtAddr::new(vstart)).map_err(Error::msg)?;
-        let vend = Page::containing_address(VirtAddr::new(vend));
-        let pstart = PhysFrame::from_start_address(PhysAddr::new(pstart)).map_err(Error::msg)?;
-        let pend = PhysFrame::containing_address(PhysAddr::new(pend));
-
-        let pages = Page::range_inclusive(vstart, vend);
-        let frames = PhysFrame::range_inclusive(pstart, pend);
-
-        if pages.len() != frames.len() { return Err(anyhow!("Incorrect mapping")); }
-
-        for (page, frame) in pages.zip(frames) {
-            page_table
-                .map_to(page, frame, PageTableFlags::PRESENT | PageTableFlags::WRITABLE, self)
-                .map_err(|e| anyhow!("{e:?}"))?
-                .flush();
+        let (oldptframe, flags) = Cr3::read();
+        let oldpt = & *(oldptframe.start_address().as_u64() as *const PageTable);
+        for (i, entry) in oldpt.iter().enumerate() {
+            if !entry.is_unused() { pt[i] = entry.clone(); }
         }
+
+        Cr3::write(ptframe, flags);
 
         Ok(())
     }
@@ -172,7 +136,7 @@ fn load_kernel(mem: &Memory) -> Result<KStart> {
     unsafe { Ok(mem::transmute(elf.ehdr.e_entry)) }
 }
 
-fn find_acpi() -> Result<ACPIAddr> {
+fn find_acpi() -> Result<u64> {
     println!("[+] Locating ACPI Table");
 
     system::with_config_table(|entries| {
@@ -208,8 +172,8 @@ fn setup_video<'a>() -> Result<Framebuffer<'a>> {
 
     gop.set_mode(&mode)?;
 
-    let ptr = gop.frame_buffer().as_mut_ptr() as *mut [[u32; 1920]; 1080];
-    unsafe { Ok(&mut *ptr) }
+    let ptr = gop.frame_buffer().as_mut_ptr();
+    unsafe { Ok(mem::transmute(ptr)) }
 }
 
 fn init() -> Result<()> {
@@ -231,7 +195,7 @@ fn init() -> Result<()> {
         let _ = boot::exit_boot_services(MemoryType::BOOT_SERVICES_DATA);
     }
 
-    kstart(acpi, fb);
+    kstart(acpi, &mem.free, fb);
 
     Ok(())
 }
