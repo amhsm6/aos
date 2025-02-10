@@ -1,4 +1,4 @@
-MODE ?= debug
+MODE ?= release
 ifeq ($(MODE), release)
 	CARGO_MODE = --release
 endif

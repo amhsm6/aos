@@ -5,6 +5,7 @@ edition = "2021"
 
 [lints.rust]
 unused_must_use = { level = "forbid" }
+static_mut_refs = { level = "allow" }
 
 [dependencies]
 rusttype = { version = "0.9.3", default-features = false, features = ["libm-math"] }

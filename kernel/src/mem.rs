@@ -3,7 +3,7 @@ extern crate alloc;
 use core::alloc::Layout;
 use alloc::alloc::alloc;
 use anyhow::{anyhow, Error, Result};
-use x86_64::{PhysAddr, VirtAddr};
+use x86_64::{addr, PhysAddr, VirtAddr};
 use x86_64::registers::control::Cr3;
 use x86_64::structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageSize, PageTable, PageTableFlags, PhysFrame, Size2MiB, Size4KiB};
 
@@ -18,6 +18,13 @@ pub struct MemoryPool {
 }
 
 impl MemoryPool {
+    pub fn align(start: u64, end: u64) -> MemoryPool {
+        MemoryPool {
+            start: addr::align_down(start, Size2MiB::SIZE),
+            end:   addr::align_up(end, Size2MiB::SIZE)
+        }
+    }
+
     pub unsafe fn map<A: FrameAllocator<Size4KiB>>(&self, page_table: &mut OffsetPageTable, falloc: &mut A, vstart: u64) -> Result<()> {
         let pstart = self.start;
         let pend = self.end - 1;

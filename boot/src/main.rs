@@ -26,7 +26,7 @@ use kernel::drivers::video::framebuffer::Framebuffer;
 
 // TODO: do not pass framebuffer
 
-type KStart = extern "sysv64" fn(u64, &[MemoryPool], Framebuffer) -> !;
+type KStart = extern "sysv64" fn(u64, *const MemoryPool, usize, Framebuffer) -> !;
 
 struct Memory {
     kernel: MemoryPool,
@@ -187,7 +187,7 @@ fn init() -> Result<()> {
         let _ = boot::exit_boot_services(MemoryType::BOOT_SERVICES_DATA);
     }
 
-    kstart(acpi, &mem.free, fb);
+    kstart(acpi, mem.free.as_ptr(), mem.free.len(), fb);
 
     Ok(())
 }

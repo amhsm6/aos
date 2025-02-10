@@ -13,10 +13,12 @@ use kernel::mem::MemoryPool;
 
 #[no_mangle]
 #[link_section = ".ltext.astart"]
-extern "sysv64" fn astart(acpi: u64, free: &[MemoryPool], fb: Framebuffer<'static>) -> ! {
+extern "sysv64" fn astart(acpi: u64, free_ptr: *const MemoryPool, free_size: usize, fb: Framebuffer<'static>) -> ! {
     Printer::init_global(fb, kernel::drivers::video::fonts::SF_PRO, 40.0, Color::new(255.0, 255.0, 255.0));
 
-    kernel::acpi::parse(acpi).unwrap();
+    unsafe {
+        kernel::acpi::parse(acpi).unwrap();
+    }
 
     let mut kb = Keyboard::new();
 
