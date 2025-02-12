@@ -19,9 +19,12 @@ use uefi::proto::console::text::Input;
 use uefi::table::cfg::ACPI2_GUID;
 use x86_64::addr;
 use x86_64::registers::control::{Cr3, Cr3Flags};
-use x86_64::structures::paging::{FrameAllocator, PageSize, PageTable, PhysFrame, Size2MiB, Size4KiB};
+use x86_64::structures::paging::PageSize;
+use x86_64::structures::paging::Size2MiB;
+use x86_64::structures::paging::{FrameAllocator, PageTable, PhysFrame, Size4KiB};
 
-use kernel::mem::{GlobalFrameAllocator, MemoryPool, KERNEL_END, KERNEL_SIZE, KERNEL_START};
+use kernel::memory;
+use kernel::memory::{GlobalFrameAllocator, MemoryPool, KERNEL_END, KERNEL_SIZE, KERNEL_START};
 use kernel::drivers::video::framebuffer::Framebuffer;
 
 // TODO: do not pass framebuffer
@@ -47,13 +50,13 @@ impl Memory {
                 let end = addr::align_down(e.phys_start + e.page_count * 4096, Size2MiB::SIZE);
                 (start, end)
             })
-            .filter(|(start, end)| end > start)
+            .filter(|(end, start)| end > start)
             .map(|(start, end)| {
                 if kernel.is_none() && end - start >= KERNEL_SIZE {
-                    let kernel_end = start + KERNEL_SIZE;
-                    kernel = Some(MemoryPool { start, end: kernel_end });
+                    let kend = start + KERNEL_SIZE;
 
-                    MemoryPool { start: kernel_end, end }
+                    kernel = Some(MemoryPool { start, end: kend });
+                    MemoryPool { start: kend, end }
                 } else {
                     MemoryPool { start, end }
                 }
@@ -90,7 +93,7 @@ impl Memory {
         println!("[+] Mapping Memory");
 
         println!("Mapping 0x{:x} -- 0x{:x} to 0x{:x} -- 0x{:x}", self.kernel.start, self.kernel.end - 1, KERNEL_START, KERNEL_END);
-        kernel::mem::map(self.kernel, KERNEL_START)?;
+        memory::map(self.kernel, KERNEL_START)?;
 
         Ok(())
     }
@@ -109,7 +112,7 @@ fn load_kernel(mem: &Memory) -> Result<KStart> {
         .ok_or(anyhow!("Elf does not contain segments"))?
         .into_iter()
         .filter(|phdr| phdr.p_type == PT_LOAD)
-        .try_for_each(|phdr| {
+        .try_for_each(|phdr| -> Result<()> {
             let src = elf.segment_data(&phdr)?;
             let dst = (mem.kernel.start + phdr.p_paddr) as *mut u8;
             let size = phdr.p_memsz as usize;
@@ -121,7 +124,7 @@ fn load_kernel(mem: &Memory) -> Result<KStart> {
                 ptr::copy(src.as_ptr(), dst, src.len());
             }
 
-            anyhow::Ok(())
+            Ok(())
         })?;
 
     unsafe { Ok(mem::transmute(elf.ehdr.e_entry)) }

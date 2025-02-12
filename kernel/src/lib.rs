@@ -2,4 +2,4 @@
 
 pub mod acpi;
 pub mod drivers;
-pub mod mem;
+pub mod memory;
