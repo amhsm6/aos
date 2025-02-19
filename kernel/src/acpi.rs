@@ -8,9 +8,7 @@ use crate::println;
 use mapper::AcpiMapper;
 use pci::PCI;
 
-pub struct ACPI {
-    tables: AcpiTables<AcpiMapper>
-}
+pub struct ACPI;
 
 impl ACPI {
     pub fn parse(addr: u64) -> Result<ACPI> {
@@ -21,8 +19,6 @@ impl ACPI {
 
         PCI::enumerate(&acpi)?;
 
-        Ok(
-            ACPI { tables: acpi }
-        )
+        Ok(ACPI)
     }
 }

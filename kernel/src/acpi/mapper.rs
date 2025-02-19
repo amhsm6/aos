@@ -1,6 +1,7 @@
 use core::cell::RefCell;
 use core::ptr::NonNull;
 use acpi::{AcpiHandler, PhysicalMapping};
+use x86_64::PhysAddr;
 
 use crate::{memory, println};
 use crate::memory::MemoryPool;
@@ -12,7 +13,7 @@ pub struct AcpiMapper {
 
 impl AcpiMapper {
     pub fn new() -> AcpiMapper {
-        AcpiMapper { top: RefCell::new(0xffffffff80000000) }
+        AcpiMapper { top: RefCell::new(0xfffffffe_00000000) }
     }
 }
 
@@ -25,6 +26,9 @@ impl AcpiHandler for AcpiMapper {
         let virt = *self.top.borrow();
         *self.top.borrow_mut() += mapped_size;
 
+        println!("0x{:x} 0x{:x} 0x{:x}", pool.start, pool.end, virt);
+        println!("{:?}", PhysAddr::new(pool.start));
+        println!("{:?}", PhysAddr::new(pool.end - 1));
         memory::map(pool, virt).unwrap();
 
         println!("Mapping 0x{:x} - 0x{:x} to 0x{:x}. REQ 0x{:x}", pool.start, pool.end, virt, physical_address);

@@ -8,8 +8,8 @@ use x86_64::{addr, PhysAddr, VirtAddr};
 use x86_64::registers::control::Cr3;
 use x86_64::structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageSize, PageTable, PageTableFlags, PhysFrame, Size2MiB, Size4KiB};
 
-pub const KERNEL_START: u64 = 0xffffffffaf000000;
-pub const KERNEL_END:   u64 = 0xffffffffffffffff;
+pub const KERNEL_START: u64 = 0xffffffff_af000000;
+pub const KERNEL_END:   u64 = 0xffffffff_ffffffff;
 pub const KERNEL_SIZE:  u64 = KERNEL_END - KERNEL_START + 1;
 
 #[derive(Clone, Copy)]
@@ -19,6 +19,14 @@ pub struct MemoryPool {
 }
 
 impl MemoryPool {
+    pub fn single(start: u64) -> MemoryPool {
+        if !VirtAddr::new(start).is_aligned(Size2MiB::SIZE) {
+            panic!("MemoryPool::single expects 2MB-aligned address: 0x{start:x}");
+        }
+
+        MemoryPool::align(start, start + 1)
+    }
+
     pub fn align(start: u64, end: u64) -> MemoryPool {
         MemoryPool {
             start: addr::align_down(start, Size2MiB::SIZE),
@@ -33,7 +41,7 @@ impl MemoryPool {
     pub unsafe fn map<A: FrameAllocator<Size4KiB>>(&self, page_table: &mut OffsetPageTable, falloc: &mut A, vstart: u64) -> Result<()> {
         let pstart = self.start;
         let pend = self.end - 1;
-        let vend = vstart + (pend - pstart);
+        let vend = vstart + self.size() - 1;
 
         let vstart: Page<Size2MiB> = Page::from_start_address(VirtAddr::new(vstart)).map_err(Error::msg)?;
         let vend = Page::containing_address(VirtAddr::new(vend));
@@ -85,4 +93,19 @@ pub unsafe fn map(pool: MemoryPool, virt: u64) -> Result<()> {
     let mut page_table = OffsetPageTable::new(pt, VirtAddr::zero());
 
     pool.map(&mut page_table, &mut GlobalFrameAllocator, virt)
+}
+
+pub unsafe fn unmap(vstart: u64, count: usize) -> Result<()> {
+    let (ptframe, _) = Cr3::read();
+    let pt = &mut *(ptframe.start_address().as_u64() as *mut PageTable);
+    let mut page_table = OffsetPageTable::new(pt, VirtAddr::zero());
+
+    let vstart: Page<Size2MiB> = Page::from_start_address(VirtAddr::new(vstart)).map_err(Error::msg)?;
+    let vend = vstart + count as u64 * Size2MiB :: SIZE;
+    for page in Page::range_inclusive(vstart, vend) {
+        page_table.unmap(page).map_err(|e| anyhow!("{e:?}"))?.1
+            .flush();
+    }
+
+    Ok(())
 }

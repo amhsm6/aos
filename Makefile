@@ -22,10 +22,12 @@ image: $(kernel.elf) $(boot.efi)
 	sudo cp $(boot.efi) esp/EFI/BOOT/BOOTX64.EFI
 	sudo umount esp
 
-$(kernel.elf): kernel/src/*
+.PHONY: $(kernel.elf)
+$(kernel.elf):
 	cd kernel; cargo build $(CARGO_MODE)
 
-$(boot.efi): $(kernel.elf) boot/src/*
+.PHONY: $(boot.efi)
+$(boot.efi):
 	cd boot; cargo build $(CARGO_MODE)
 
 clean:

@@ -50,7 +50,7 @@ impl Memory {
                 let end = addr::align_down(e.phys_start + e.page_count * 4096, Size2MiB::SIZE);
                 (start, end)
             })
-            .filter(|(end, start)| end > start)
+            .filter(|(start, end)| end > start)
             .map(|(start, end)| {
                 if kernel.is_none() && end - start >= KERNEL_SIZE {
                     let kend = start + KERNEL_SIZE;
@@ -71,7 +71,7 @@ impl Memory {
         )
     }
 
-    unsafe fn init() -> Result<()> {
+    unsafe fn init_page_table() -> Result<()> {
         println!("[+] Initializing Page Table");
 
         let ptframe: PhysFrame<Size4KiB> = GlobalFrameAllocator.allocate_frame().ok_or(anyhow!("Unable to allocate Page Table"))?;
@@ -89,7 +89,7 @@ impl Memory {
         Ok(())
     }
 
-    unsafe fn map(&self) -> Result<()> {
+    unsafe fn map_kernel(&self) -> Result<()> {
         println!("[+] Mapping Memory");
 
         println!("Mapping 0x{:x} -- 0x{:x} to 0x{:x} -- 0x{:x}", self.kernel.start, self.kernel.end - 1, KERNEL_START, KERNEL_END);
@@ -175,11 +175,11 @@ fn init() -> Result<()> {
     system::with_stdout(|stdout| stdout.clear())?;
 
     let mem = Memory::build()?;
-    unsafe { Memory::init()?; }
+    unsafe { Memory::init_page_table()?; }
 
     let kstart = load_kernel(&mem)?;
     let acpi = find_acpi()?;
-    unsafe { mem.map()? };
+    unsafe { mem.map_kernel()? };
     wait_for_key()?;
 
     println!("[+] Starting Kernel");

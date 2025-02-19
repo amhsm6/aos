@@ -1,21 +1,32 @@
 /*
 
-0xffffffffaf000000
+0xfffffffe_00000000
+|
+| ACPI
+|
+0xffffffff_00000000
+|
+| PCI
+|
+*
+|
+0xffffffff_af000000
 |
 | KERNEL (512MB)
 |
-0xffffffffcf000000
+0xffffffff_cf000000
 |
 *
-0xffffffffdff00000
+|
+0xffffffff_dff00000
 |
 | HEAP (512MB)
 |
-0xfffffffffff00000
+0xffffffff_fff00000
 |
 | STACK (~1MB)
 |
-0xfffffffffffffff0
+0xffffffff_fffffff0
 
 */
 
