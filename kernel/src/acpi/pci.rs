@@ -27,14 +27,10 @@ impl PCI {
 
                 for device in 0..32 {
                     for function in 0..8 {
+                        let a = PCI::addr(confarea, bus, device, function);
                         println!("BUS {bus} DEV {device} FUNC {function}");
 
-                        let a = PCI::addr(confarea, bus, device, function);
-                        println!("0x{a:x}");
-                        
-                        unsafe {
-                            println!("0x{:x}", *((confarea + function as u64 * 4096) as *const u16));
-                        }
+                        unsafe { println!("0x{:x}", *(a as *const u16)); }
                     }
                 }
 

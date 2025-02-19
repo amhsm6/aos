@@ -12,6 +12,8 @@ extern "C" {
     static HEAP_END: u64;
 }
 
+// TODO: figure out a better way
+
 struct Allocator {
     top: Cell<*mut u8>
 }

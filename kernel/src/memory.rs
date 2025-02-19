@@ -6,7 +6,7 @@ use anyhow::{anyhow, Error, Result};
 use x86_64::structures::paging::mapper::MapToError;
 use x86_64::{addr, PhysAddr, VirtAddr};
 use x86_64::registers::control::Cr3;
-use x86_64::structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageSize, PageTable, PageTableFlags, PhysFrame, Size2MiB, Size4KiB};
+use x86_64::structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageSize, PageTable, PageTableFlags, PhysFrame, Size2MiB, Size4KiB, Translate};
 
 pub const KERNEL_START: u64 = 0xffffffff_af000000;
 pub const KERNEL_END:   u64 = 0xffffffff_ffffffff;
@@ -75,14 +75,22 @@ impl MemoryPool {
     }
 }
 
+// TODO: figure out a better way
+
 pub struct GlobalFrameAllocator;
 
 unsafe impl<S: PageSize> FrameAllocator<S> for GlobalFrameAllocator {
     fn allocate_frame(&mut self) -> Option<PhysFrame<S>> {
         unsafe {
+            let (ptframe, _) = Cr3::read();
+            let pt = &mut *(ptframe.start_address().as_u64() as *mut PageTable);
+            let page_table = OffsetPageTable::new(pt, VirtAddr::zero());
+
             let layout = Layout::from_size_align(S::SIZE as usize, S::SIZE as usize).ok()?;
             let ptr = alloc(layout);
-            PhysFrame::from_start_address(PhysAddr::new(ptr as u64)).ok()
+
+            let addr = page_table.translate_addr(VirtAddr::from_ptr(ptr))?;
+            PhysFrame::from_start_address(addr).ok()
         }
     }
 }
@@ -101,8 +109,8 @@ pub unsafe fn unmap(vstart: u64, count: usize) -> Result<()> {
     let mut page_table = OffsetPageTable::new(pt, VirtAddr::zero());
 
     let vstart: Page<Size2MiB> = Page::from_start_address(VirtAddr::new(vstart)).map_err(Error::msg)?;
-    let vend = vstart + count as u64 * Size2MiB :: SIZE;
-    for page in Page::range_inclusive(vstart, vend) {
+    let vend = vstart + count as u64 * Size2MiB::SIZE;
+    for page in Page::range(vstart, vend) {
         page_table.unmap(page).map_err(|e| anyhow!("{e:?}"))?.1
             .flush();
     }

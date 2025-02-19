@@ -5,8 +5,8 @@ mod alloc;
 
 use core::panic::PanicInfo;
 
-use kernel::acpi::ACPI;
 use kernel::{print, println};
+use kernel::acpi::ACPI;
 use kernel::drivers::keyboard::Keyboard;
 use kernel::drivers::video::framebuffer::Framebuffer;
 use kernel::drivers::video::printer::{Color, Printer};
@@ -17,7 +17,7 @@ use kernel::memory::MemoryPool;
 extern "sysv64" fn astart(acpi: u64, _free_ptr: *const MemoryPool, _free_size: usize, fb: Framebuffer<'static>) -> ! {
     Printer::init_global(fb, kernel::drivers::video::fonts::SF_PRO, 30.0, Color::new(255.0, 255.0, 255.0));
 
-    let _ = ACPI::parse(acpi).unwrap();
+    ACPI::parse(acpi).unwrap();
 
     let mut kb = Keyboard::new();
 
